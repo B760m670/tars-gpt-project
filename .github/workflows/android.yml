@@ -50,10 +50,10 @@ jobs:
       - name: Build llama.cpp server (arm64-v8a)
         run: |
           set -e
-          # Pin to b5000: a known Android-friendly tag, before multimodal (mtmd)
-          # and the Svelte web UI were pulled into the server — those don't
-          # cross-compile cleanly with the NDK and TARS doesn't need them.
-          git clone --depth 1 --branch b5000 https://github.com/ggml-org/llama.cpp /tmp/llama.cpp
+          # Pin to b5012: a real, Android-friendly tag (b5000 isn't a tag), before
+          # multimodal (mtmd) and the Svelte web UI were pulled into the server —
+          # those don't cross-compile cleanly with the NDK and TARS doesn't need them.
+          git clone --depth 1 --branch b5012 https://github.com/ggml-org/llama.cpp /tmp/llama.cpp
           NDK="$ANDROID_SDK_ROOT/ndk/26.1.10909125"
           cmake -S /tmp/llama.cpp -B /tmp/llama-build \
             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
