@@ -12,8 +12,10 @@ android {
         applicationId 'com.tars.app'
         minSdk 21            // Android 5.0 (Lollipop)
         targetSdk 33
-        versionCode 1
-        versionName '0.1'
+        // CI passes -PversionCode=<run number> so each build is "newer" than the
+        // last; the in-app updater compares this against the published latest.
+        versionCode (project.findProperty('versionCode') ?: '1').toString().toInteger()
+        versionName (project.findProperty('versionName') ?: 'dev').toString()
 
         // Chaquopy ships a native CPython per ABI; cover phones old and new.
         ndk {

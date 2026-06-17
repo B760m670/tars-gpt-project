@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">TARS</string>
     <string name="send">Send</string>
+    <string name="logs">Logs</string>
     <string name="input_hint">Say something to TARS…</string>
     <string name="greeting">TARS online. Talk to me — in English or Russian.</string>
 </resources>

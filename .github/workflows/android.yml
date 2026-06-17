@@ -41,7 +41,15 @@ jobs:
           gradle-version: '7.6.4'
 
       - name: Build debug APK
-        run: gradle -p android assembleDebug --no-daemon --stacktrace
+        # versionCode = run number so every build is "newer"; the in-app updater
+        # compares against this.
+        run: |
+          gradle -p android assembleDebug --no-daemon --stacktrace \
+            -PversionCode=${{ github.run_number }} \
+            -PversionName=b${{ github.run_number }}
+
+      - name: Write version marker
+        run: echo "${{ github.run_number }}" > version.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -50,13 +58,16 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-      # On main, also publish a rolling pre-release so the APK is one click to
-      # download (not just an Actions artifact).
-      - name: Publish APK to a rolling release
-        if: github.ref == 'refs/heads/main'
+      # Publish a rolling pre-release so the APK + version marker are one click to
+      # download AND so the in-app self-updater can find the latest build. Runs on
+      # main and on the active dev branch (so updates work while testing it).
+      - name: Publish APK to the rolling "latest" release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/import-tars-folder-m8wylg'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: TARS (latest build)
           prerelease: true
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          files: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            version.txt

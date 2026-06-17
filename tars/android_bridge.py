@@ -35,3 +35,22 @@ def active_brain() -> str:
     if _tars is None:
         return "offline"
     return _tars.brain.last_used or "auto"
+
+
+def diagnostics() -> str:
+    """A short status report for the in-app Logs view."""
+    from . import models
+    ram = models.total_ram_mb()
+    pick = models.recommend(ram)
+    lines = [
+        "device RAM: {}".format("{} MB".format(ram) if ram else "unknown"),
+        "recommended local model: {}".format(pick.id if pick else "none (cloud + offline brain)"),
+    ]
+    if _tars is not None:
+        order = ",".join(b.name for b in _tars.brain.brains)
+        lines.append("brain order: {}".format(order))
+        lines.append("last brain used: {}".format(_tars.brain.last_used or "auto"))
+        lines.append("memory: {}".format(_tars.settings.memory_path))
+    else:
+        lines.append("core not initialised yet")
+    return "\n".join(lines)
