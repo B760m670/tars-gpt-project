@@ -4,6 +4,12 @@ plugins {
     id 'com.chaquo.python'
 }
 
+// CI passes -PversionCode=<run number> so each build is "newer" than the last;
+// the in-app updater compares this against the published latest. Resolved here
+// (not inline in defaultConfig) to avoid Groovy command-chain ambiguity.
+def tarsVersionCode = (project.findProperty('versionCode') ?: '1').toString().toInteger()
+def tarsVersionName = (project.findProperty('versionName') ?: 'dev').toString()
+
 android {
     namespace 'com.tars.app'
     compileSdk 33
@@ -12,10 +18,8 @@ android {
         applicationId 'com.tars.app'
         minSdk 21            // Android 5.0 (Lollipop)
         targetSdk 33
-        // CI passes -PversionCode=<run number> so each build is "newer" than the
-        // last; the in-app updater compares this against the published latest.
-        versionCode (project.findProperty('versionCode') ?: '1').toString().toInteger()
-        versionName (project.findProperty('versionName') ?: 'dev').toString()
+        versionCode tarsVersionCode
+        versionName tarsVersionName
 
         // Chaquopy ships a native CPython per ABI; cover phones old and new.
         ndk {
