@@ -1,0 +1,54 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.chaquo.python'
+}
+
+android {
+    namespace 'com.tars.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.tars.app'
+        minSdk 21            // Android 5.0 (Lollipop)
+        targetSdk 34
+        versionCode 1
+        versionName '0.1'
+
+        // Chaquopy ships a native CPython per ABI; cover phones old and new.
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+        }
+
+        python {
+            version '3.11'
+        }
+    }
+
+    sourceSets {
+        main {
+            // Bundle the repo-root Python so `import tars` works inside the APK.
+            python {
+                srcDirs = ['../..']
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+}

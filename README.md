@@ -78,8 +78,10 @@ In the chat:
 2. **M2 — Ears.** Wake word ("Hey TARS") + offline STT → TARS hears you.
 3. **M3 — Voice.** AI clone of the original TARS voice plugged into the Voice
    socket; cloud-clone on capable devices, light voice on weak ones.
-4. **M4 — Android service.** A native always-on background service so TARS is
-   present and answers anytime, even on weak phones.
+4. **M4 — Android app.** 🚧 In progress: a Chaquopy app that runs the `tars`
+   core inside an APK (minSdk 21 = Android 5), built and published by GitHub
+   Actions. Next: an always-on background service so TARS answers anytime. See
+   [`android/`](android/).
 5. **M5 — Skills & richer memory.** Tools/skills + vector recall.
 
 Prior art we lean on: TarsGPT, TARS-AI Community, plus the standard

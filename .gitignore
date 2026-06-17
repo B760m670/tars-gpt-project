@@ -8,3 +8,12 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+.idea/
+*.iml

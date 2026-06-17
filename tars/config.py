@@ -6,9 +6,20 @@ stripped-down Android Python.
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
+
+
+def _default_memory_path() -> str:
+    """Where to keep memory.db when TARS_MEMORY isn't set. Path.home() can raise
+    on Android (no HOME), so fall back to a temp dir there."""
+    try:
+        base = Path.home()
+    except (RuntimeError, OSError):
+        base = Path(tempfile.gettempdir())
+    return str(base / ".tars" / "memory.db")
 
 
 def _load_dotenv(path: Path) -> None:
@@ -69,9 +80,7 @@ def load_settings() -> Settings:
         for b in os.environ.get("TARS_BRAIN_ORDER", "gemini,groq,local,ollama,offline").split(",")
         if b.strip()
     ]
-    memory_path = Path(
-        os.environ.get("TARS_MEMORY", str(Path.home() / ".tars" / "memory.db"))
-    )
+    memory_path = Path(os.environ.get("TARS_MEMORY") or _default_memory_path())
     return Settings(
         personality=personality,
         brain_order=brain_order,
