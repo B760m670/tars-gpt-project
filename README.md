@@ -13,13 +13,18 @@ and you can plug in any compatible "driver" — the core doesn't care which:
 | Socket  | Job                       | Drivers (now → later)                          |
 |---------|---------------------------|------------------------------------------------|
 | Ears    | speech → text (STT)       | *(stub)* → Vosk / whisper.cpp / openWakeWord   |
-| **Brain** | text → witty TARS reply | **Gemini, Groq (free cloud) + Ollama (local)** |
+| **Brain** | text → witty TARS reply | **Gemini, Groq (free cloud) + Ollama (local) + offline fallback** |
 | Voice   | text → speech (TTS)       | *(stub)* → **AI clone of the original TARS voice** (F5-TTS / XTTS / RVC) |
 | Memory  | remember you & the talk   | **SQLite** → + vector recall                   |
 
 **"Hybrid brain"** = the Brain socket holds several drivers and falls back:
-online → free cloud model (smarter); offline → a local model. Same TARS, just
-thinks "outside" or "inside" depending on the network.
+online → free cloud model (smarter); offline → a local model; and, as a
+guaranteed last resort, a **dependency-free offline brain** so TARS is *never*
+dead — with zero setup, no key and no network, he still answers in character.
+
+**Bilingual.** TARS replies in the language you speak to him — **Russian or
+English** — keeping the same dry character in both. (The offline fallback
+detects the language too.)
 
 ## Free but powerful
 

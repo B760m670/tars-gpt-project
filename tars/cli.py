@@ -78,11 +78,14 @@ def main() -> None:
     tars = Tars(settings)
     print(BANNER)
 
-    if not tars.brain.available():
-        print("[!] No brain available yet. Add a FREE key (no credit card):")
+    smart = any(b.name != "offline" and b.available() for b in tars.brain.brains)
+    if not smart:
+        print("[!] Running on the OFFLINE brain only — TARS stays in character but")
+        print("    can't truly think yet. Add a FREE key (no credit card) for the")
+        print("    full mind:")
         print("    Gemini -> https://aistudio.google.com/apikey  (GEMINI_API_KEY)")
         print("    Groq   -> https://console.groq.com/keys        (GROQ_API_KEY)")
-        print("    or run Ollama locally for full offline. See .env.example.\n")
+        print("    or run Ollama locally. See .env.example.\n")
 
     while True:
         try:
