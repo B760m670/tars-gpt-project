@@ -4,6 +4,7 @@ Run:  python -m tars
 """
 from __future__ import annotations
 
+from . import models
 from .brains import BrainError
 from .config import Settings, load_settings
 from .core import Tars
@@ -24,6 +25,7 @@ commands:
   /settings     show current dials and active brain
   /remember k=v store a fact TARS should keep (e.g. /remember name=Cooper)
   /facts        list remembered facts
+  /models       on-device brain models (light->heavy) + what fits this device
   /help         this help
   /quit         power down\
 """
@@ -35,6 +37,25 @@ def _clamp(text: str) -> int:
     except ValueError:
         return 0
     return max(0, min(100, value))
+
+
+def print_models() -> None:
+    ram = models.total_ram_mb()
+    pick = models.recommend(ram)
+    ram_str = "{} MB".format(ram) if ram else "unknown"
+    print("on-device brain models (free, offline, llama.cpp) — device RAM: {}".format(ram_str))
+    for spec in models.CATALOG:
+        if ram and models.fits(spec, ram):
+            mark = "<- recommended" if pick and spec.id == pick.id else "fits"
+        elif ram:
+            mark = "too heavy"
+        else:
+            mark = ""
+        print("  {:<9} {:<5} {:>5} MB file  needs ~{} MB RAM   {}".format(
+            spec.label, spec.params, spec.file_mb, spec.min_ram_mb, mark))
+    if not pick:
+        print("  -> nothing fits comfortably; TARS uses cloud + the offline brain here.")
+    print("  set TARS_LOCAL_URL to a running llama.cpp server to use the 'local' brain.")
 
 
 def handle_command(cmd: str, tars: Tars, settings: Settings) -> bool:
@@ -68,6 +89,8 @@ def handle_command(cmd: str, tars: Tars, settings: Settings) -> bool:
             print("usage: /remember key=value")
     elif name == "/facts":
         print(tars.memory.facts_text() or "[no facts yet]")
+    elif name == "/models":
+        print_models()
     else:
         print("unknown command; /help")
     return True

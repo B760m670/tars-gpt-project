@@ -13,7 +13,7 @@ and you can plug in any compatible "driver" — the core doesn't care which:
 | Socket  | Job                       | Drivers (now → later)                          |
 |---------|---------------------------|------------------------------------------------|
 | Ears    | speech → text (STT)       | *(stub)* → Vosk / whisper.cpp / openWakeWord   |
-| **Brain** | text → witty TARS reply | **Gemini, Groq (free cloud) + Ollama (local) + offline fallback** |
+| **Brain** | text → witty TARS reply | **Gemini, Groq (free cloud) + on-device llama.cpp + Ollama + offline fallback** |
 | Voice   | text → speech (TTS)       | *(stub)* → **AI clone of the original TARS voice** (F5-TTS / XTTS / RVC) |
 | Memory  | remember you & the talk   | **SQLite** → + vector recall                   |
 
@@ -32,7 +32,13 @@ All of this is $0:
 
 - **Brain (cloud, free, no card):** Google **Gemini** (AI Studio, ~1500 req/day),
   **Groq** (Llama 3.3 70B, fast), and others. Get a key in a minute.
-- **Brain (offline, free):** **Ollama** with a small model (e.g. `qwen2.5:3b`).
+- **Brain (on-device, free):** an embedded **llama.cpp** engine loads a **GGUF
+  model you pick from the built-in manager** — a ladder from *Feather* (0.5B,
+  runs on a modest phone) to *Heavy* (7B, flagships). TARS reads the device RAM
+  and recommends the heaviest model that fits; type `/models` to see the list.
+  (This is the "install models, light to heavy" idea — done with the engine
+  Ollama itself uses, so nothing extra has to be installed on the phone.)
+- **Brain (power users):** point at an **Ollama** server on a PC/Termux.
 - **Voice (later):** the *original* TARS voice is reproduced by **AI voice
   cloning** from film audio (F5-TTS / Coqui XTTS v2 / RVC) — not a robotic TTS.
   Heavy clone runs on a capable device or a free GPU (Colab / HF Spaces); weak

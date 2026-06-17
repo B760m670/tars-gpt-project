@@ -48,6 +48,8 @@ class Settings:
     gemini_model: str
     groq_key: Optional[str]
     groq_model: str
+    local_url: str
+    local_model: str
     ollama_url: str
     ollama_model: str
     memory_path: Path
@@ -64,7 +66,7 @@ def load_settings() -> Settings:
     )
     brain_order = [
         b.strip()
-        for b in os.environ.get("TARS_BRAIN_ORDER", "gemini,groq,ollama,offline").split(",")
+        for b in os.environ.get("TARS_BRAIN_ORDER", "gemini,groq,local,ollama,offline").split(",")
         if b.strip()
     ]
     memory_path = Path(
@@ -77,6 +79,8 @@ def load_settings() -> Settings:
         gemini_model=os.environ.get("GEMINI_MODEL", "gemini-2.0-flash"),
         groq_key=os.environ.get("GROQ_API_KEY") or None,
         groq_model=os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        local_url=os.environ.get("TARS_LOCAL_URL", "http://127.0.0.1:8080"),
+        local_model=os.environ.get("TARS_LOCAL_MODEL", "local"),
         ollama_url=os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"),
         ollama_model=os.environ.get("OLLAMA_MODEL", "qwen2.5:3b"),
         memory_path=memory_path,
