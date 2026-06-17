@@ -44,6 +44,15 @@ android {
             minifyEnabled false
         }
     }
+
+    packagingOptions {
+        // The llama.cpp server ships as an executable disguised as a .so; keep
+        // it uncompressed/extracted so it can be run, and don't strip it.
+        jniLibs {
+            useLegacyPackaging true
+        }
+        doNotStrip '**/libllamaserver.so'
+    }
 }
 
 dependencies {

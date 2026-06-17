@@ -37,6 +37,17 @@ def active_brain() -> str:
     return _tars.brain.last_used or "auto"
 
 
+def recommended_model() -> str:
+    """The model the device should run, as 'id|filename|url|size_mb', or '' if
+    nothing fits (then TARS leans on cloud + the offline brain). The Android
+    side downloads this and points the embedded llama.cpp server at it."""
+    from . import models
+    spec = models.recommend()
+    if spec is None:
+        return ""
+    return "|".join([spec.id, spec.filename, spec.url, str(spec.file_mb)])
+
+
 def diagnostics() -> str:
     """A short status report for the in-app Logs view."""
     from . import models

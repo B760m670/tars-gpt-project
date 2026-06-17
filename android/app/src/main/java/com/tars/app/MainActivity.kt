@@ -41,11 +41,13 @@ class MainActivity : AppCompatActivity() {
         val input = findViewById<EditText>(R.id.input)
         val send = findViewById<Button>(R.id.send)
         val logsBtn = findViewById<Button>(R.id.logs)
+        val brainBtn = findViewById<Button>(R.id.brain)
         val log = findViewById<TextView>(R.id.log)
         val scroll = findViewById<ScrollView>(R.id.scroll)
 
         log.text = getString(R.string.greeting)
         logsBtn.setOnClickListener { showLogs() }
+        brainBtn.setOnClickListener { setUpLocalBrain() }
 
         worker.execute {
             try {
@@ -56,6 +58,9 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 log("core: failed to start — ${e.message}")
             }
+            // If a local model is already downloaded, bring the on-device brain
+            // up automatically so TARS thinks offline from launch.
+            autoStartLocalBrain()
             // Check for a newer build in the background.
             Updater.checkAndPrompt(this) { line -> log(line) }
         }
@@ -79,6 +84,52 @@ class MainActivity : AppCompatActivity() {
                     scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             }
+        }
+    }
+
+    /** Tapped by the user: download the recommended model (once) and start the
+     *  on-device llama.cpp brain. Runs on the worker thread; the download is big. */
+    private fun setUpLocalBrain() {
+        log("brain: setting up on-device engine…")
+        worker.execute {
+            try {
+                if (!LlamaServer.isSupported(this)) {
+                    log("brain: no on-device engine for this CPU (need arm64). Use a key or offline.")
+                    return@execute
+                }
+                val info = bridge.callAttr("recommended_model").toString()
+                if (info.isBlank()) {
+                    log("brain: this device's RAM is too low for a local model — cloud/offline only.")
+                    return@execute
+                }
+                val parts = info.split("|")           // id|filename|url|size_mb
+                val filename = parts[1]
+                val url = parts[2]
+                val model = java.io.File(LlamaServer.modelsDir(this), filename)
+                log("brain: model = ${parts[0]} (~${parts.getOrElse(3) { "?" }} MB)")
+                LlamaServer.downloadModel(url, model) { line -> log(line) }
+                LlamaServer.start(this, model) { line -> log(line) }
+            } catch (e: Exception) {
+                log("brain: setup failed — ${e.message}")
+            }
+        }
+    }
+
+    /** Start the local brain only if its model is already downloaded. */
+    private fun autoStartLocalBrain() {
+        try {
+            if (!LlamaServer.isSupported(this)) return
+            val info = bridge.callAttr("recommended_model").toString()
+            if (info.isBlank()) return
+            val filename = info.split("|")[1]
+            val model = java.io.File(LlamaServer.modelsDir(this), filename)
+            if (model.exists()) {
+                LlamaServer.start(this, model) { line -> log(line) }
+            } else {
+                log("brain: tap 'Brain' to download the on-device model (one time).")
+            }
+        } catch (e: Exception) {
+            log("brain: autostart check failed — ${e.message}")
         }
     }
 
@@ -112,6 +163,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        LlamaServer.stop()
         worker.shutdownNow()
         super.onDestroy()
     }
