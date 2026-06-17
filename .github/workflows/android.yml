@@ -63,7 +63,9 @@ jobs:
             -DLLAMA_BUILD_TESTS=OFF \
             -DLLAMA_BUILD_EXAMPLES=OFF \
             -DLLAMA_BUILD_SERVER=ON
-          cmake --build /tmp/llama-build --target llama-server -j"$(nproc)"
+          # Single-threaded: server.cpp is a huge translation unit that can OOM
+          # under parallel make, and -j1 surfaces the exact error if one occurs.
+          cmake --build /tmp/llama-build --target llama-server -j1
           BIN="$(find /tmp/llama-build -name llama-server -type f | head -n1)"
           echo "built server: $BIN"
           mkdir -p android/app/src/main/jniLibs/arm64-v8a
