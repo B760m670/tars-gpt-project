@@ -50,7 +50,10 @@ jobs:
       - name: Build llama.cpp server (arm64-v8a)
         run: |
           set -e
-          git clone --depth 1 https://github.com/ggml-org/llama.cpp /tmp/llama.cpp
+          # Pin to b5000: a known Android-friendly tag, before multimodal (mtmd)
+          # and the Svelte web UI were pulled into the server — those don't
+          # cross-compile cleanly with the NDK and TARS doesn't need them.
+          git clone --depth 1 --branch b5000 https://github.com/ggml-org/llama.cpp /tmp/llama.cpp
           NDK="$ANDROID_SDK_ROOT/ndk/26.1.10909125"
           cmake -S /tmp/llama.cpp -B /tmp/llama-build \
             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
@@ -61,13 +64,15 @@ jobs:
             -DLLAMA_CURL=OFF \
             -DGGML_OPENMP=OFF \
             -DLLAMA_BUILD_TESTS=OFF \
-            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_EXAMPLES=ON \
             -DLLAMA_BUILD_SERVER=ON
-          # Single-threaded: server.cpp is a huge translation unit that can OOM
-          # under parallel make, and -j1 surfaces the exact error if one occurs.
-          cmake --build /tmp/llama-build --target llama-server -j1
-          BIN="$(find /tmp/llama-build -name llama-server -type f | head -n1)"
+          # Build only the server target (-j2: modest memory, faster than -j1).
+          # The binary is named llama-server (older trees: server).
+          cmake --build /tmp/llama-build --target llama-server -j2 \
+            || cmake --build /tmp/llama-build --target server -j2
+          BIN="$(find /tmp/llama-build -type f \( -name llama-server -o -name server \) | head -n1)"
           echo "built server: $BIN"
+          test -n "$BIN"
           mkdir -p android/app/src/main/jniLibs/arm64-v8a
           cp "$BIN" android/app/src/main/jniLibs/arm64-v8a/libllamaserver.so
 
