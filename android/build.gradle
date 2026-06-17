@@ -1,7 +1,9 @@
-// Top-level build file. Plugin versions are pinned to a combination known to
-// work together (AGP 8.1 + Gradle 8.x + Chaquopy 15 + Kotlin 1.9).
+// Top-level build file. Plugin versions are pinned to a modern combination that
+// works together: AGP 8.5 + Gradle 8.7 + Chaquopy 16 + Kotlin 1.9. (Chaquopy 15
+// + AGP 8.1 tripped Gradle 8's strict task-dependency validation on
+// mergeDebugPythonSources; Chaquopy 16 wires those task dependencies correctly.)
 plugins {
-    id 'com.android.application' version '8.1.4' apply false
-    id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
-    id 'com.chaquo.python' version '15.0.1' apply false
+    id 'com.android.application' version '8.5.2' apply false
+    id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
+    id 'com.chaquo.python' version '16.0.0' apply false
 }
