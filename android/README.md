@@ -21,13 +21,19 @@ Install it on a phone (allow "install from unknown sources") and run.
 
 ## Build locally
 
-Needs JDK 17, the Android SDK, and Gradle 8.x:
+Needs JDK 17, the Android SDK, and Gradle 7.6:
 
 ```bash
 cd android
 gradle assembleDebug          # or ./gradlew once a wrapper is added
 # -> app/build/outputs/apk/debug/app-debug.apk
 ```
+
+> **Why the older toolchain?** To keep **Android 5 (minSdk 21)** we stay on
+> Chaquopy 15 — Chaquopy 16+ requires minSdk 24 (Android 7). Chaquopy 15 in turn
+> pairs with AGP 7.4 / Gradle 7.6 (on Gradle 8 its task graph trips a strict
+> validation error). If we ever drop Android 5/6, we can jump to Chaquopy 16+ /
+> AGP 8 / Gradle 8.
 
 ## Layout
 
