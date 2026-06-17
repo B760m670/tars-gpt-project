@@ -25,15 +25,6 @@ android {
         }
     }
 
-    sourceSets {
-        main {
-            // Bundle the repo-root Python so `import tars` works inside the APK.
-            python {
-                srcDirs = ['../..']
-            }
-        }
-    }
-
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
@@ -51,4 +42,15 @@ android {
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
+}
+
+// Make the repo-root `tars` package available to Chaquopy via the default
+// src/main/python source dir. We copy it (rather than point Chaquopy's srcDir at
+// the repo root) because the repo root contains this module's build/ output —
+// scanning that would recurse infinitely (Chaquopy copies into build/python and
+// then re-scans it). The copy runs at configuration time, before Chaquopy's
+// mergeDebugPythonSources task, so the sources are always present.
+copy {
+    from "${rootProject.projectDir}/../tars"
+    into "${projectDir}/src/main/python/tars"
 }
