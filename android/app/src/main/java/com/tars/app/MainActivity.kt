@@ -1,6 +1,9 @@
 package com.tars.app
 
 import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
@@ -170,22 +173,39 @@ class MainActivity : AppCompatActivity() {
         log("logs: opened")
         val view = TextView(this).apply {
             textSize = 12f
-            setPadding(40, 30, 40, 30)
+            typeface = Typeface.MONOSPACE
+            setPadding(40, 30, 40, 20)
             movementMethod = ScrollingMovementMethod()
             setTextIsSelectable(true)
         }
         logsView = view
         refreshLogsView()
 
+        val copyBtn = Button(this).apply { text = getString(R.string.copy) }
+        copyBtn.setOnClickListener {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("TARS logs", currentLogBody()))
+            log("logs: copied to clipboard")
+        }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(
+                ScrollView(this@MainActivity).apply { addView(view) },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+            )
+            addView(copyBtn)
+        }
+
         val dialog = AlertDialog.Builder(this)
             .setTitle("TARS — logs")
-            .setView(ScrollView(this).apply { addView(view) })
+            .setView(root)
             .setPositiveButton("Close", null)
             .create()
         dialog.setOnDismissListener { logsView = null }
         dialog.show()
 
-        // Live refresh while the dialog is open.
+        // Live refresh while the dialog is open. Only rewrite the text when it
+        // actually changed, so a long-press text selection isn't wiped every tick.
         ui.postDelayed(object : Runnable {
             override fun run() {
                 if (logsView !== view) return   // dialog closed (or replaced)
@@ -206,9 +226,13 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
+    private fun currentLogBody(): String =
+        synchronized(this) { "--- core ---\n$lastCore\n\n--- log ---\n$diag" }
+
     private fun refreshLogsView() {
-        val body = synchronized(this) { "--- core ---\n$lastCore\n\n--- log ---\n$diag" }
-        logsView?.text = body
+        val body = currentLogBody()
+        val view = logsView ?: return
+        if (view.text?.toString() != body) view.text = body   // avoid wiping a selection
     }
 
     /** A TARS terminal: type a shell command, or `py <code>` for Python. Runs in

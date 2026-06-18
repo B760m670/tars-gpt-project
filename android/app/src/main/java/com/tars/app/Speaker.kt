@@ -21,15 +21,15 @@ class Speaker(ctx: Context, private val log: (String) -> Unit) : TextToSpeech.On
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             ready = true
-            tts.setPitch(0.8f)        // deeper than default
-            tts.setSpeechRate(0.98f)  // calm, deliberate
-            log("voice: ready")
+            tts.setPitch(0.7f)        // deep, masculine
+            tts.setSpeechRate(0.95f)  // calm, deliberate
+            log("voice: ready (system TTS — a TARS-like Piper voice comes later)")
         } else {
             log("voice: system TTS unavailable (status $status)")
         }
     }
 
-    /** Speak in the same language the text is written in. */
+    /** Speak in the same language the text is written in, preferring a male voice. */
     fun speak(text: String) {
         if (!ready || !enabled || text.isBlank()) return
         val locale = if (cyrillic.containsMatchIn(text)) Locale("ru") else Locale.ENGLISH
@@ -38,7 +38,28 @@ class Speaker(ctx: Context, private val log: (String) -> Unit) : TextToSpeech.On
             log("voice: '$locale' not installed, using device default")
             tts.language = Locale.getDefault()
         }
+        selectMaleVoice(locale)
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tars")
+    }
+
+    /** Best effort: pick a male voice for this language if the engine offers one.
+     *  Many devices only ship a female voice, in which case the deep pitch is the
+     *  closest we get until the Piper voice lands. */
+    private fun selectMaleVoice(locale: Locale) {
+        try {
+            val candidates = tts.voices ?: return
+            val male = candidates.firstOrNull { v ->
+                v.locale.language == locale.language &&
+                    v.name.lowercase().contains("male") &&
+                    !v.name.lowercase().contains("female")
+            }
+            if (male != null && tts.voice?.name != male.name) {
+                tts.voice = male
+                log("voice: using ${male.name}")
+            }
+        } catch (e: Exception) {
+            // ignore — keep the default voice
+        }
     }
 
     fun stop() {

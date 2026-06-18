@@ -91,7 +91,7 @@ object LlamaServer {
             log("brain: no model downloaded yet")
             return
         }
-        val threads = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(2)
+        val threads = Runtime.getRuntime().availableProcessors().coerceAtLeast(2)
         val pb = ProcessBuilder(
             bin.absolutePath,
             "-m", model.absolutePath,

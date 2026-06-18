@@ -10,5 +10,6 @@
     <string name="input_hint">Say something to TARS…</string>
     <string name="terminal_hint">command, or: py &lt;code&gt;…</string>
     <string name="run">Run</string>
+    <string name="copy">Copy all</string>
     <string name="greeting">TARS online. Talk to me — in English or Russian.</string>
 </resources>
