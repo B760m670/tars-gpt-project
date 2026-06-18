@@ -2,6 +2,8 @@ package com.tars.app
 
 import android.app.AlertDialog
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.method.ScrollingMovementMethod
 import android.widget.Button
 import android.widget.EditText
@@ -28,6 +30,10 @@ class MainActivity : AppCompatActivity() {
 
     private val diag = StringBuilder()
     private val clock = SimpleDateFormat("HH:mm:ss", Locale.US)
+
+    private val ui = Handler(Looper.getMainLooper())
+    private var logsView: TextView? = null      // non-null while the Logs dialog is open
+    @Volatile private var lastCore = "(loading…)"
 
     @Synchronized
     private fun log(line: String) {
@@ -70,6 +76,7 @@ class MainActivity : AppCompatActivity() {
             if (text.isEmpty()) return@setOnClickListener
             input.setText("")
             log.append("\n\nyou> $text")
+            log("chat: sent \"${text.take(40)}\"")
             scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
 
             worker.execute {
@@ -79,6 +86,8 @@ class MainActivity : AppCompatActivity() {
                     log("chat error: ${e.message}")
                     "[error] ${e.message}"
                 }
+                val brain = try { bridge.callAttr("active_brain").toString() } catch (e: Exception) { "?" }
+                log("chat: reply via $brain")
                 runOnUiThread {
                     log.append("\nTARS> $reply")
                     scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
@@ -133,36 +142,57 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Open the logs window IMMEDIATELY (on the UI thread, never queued behind a
+     *  download or a reply) and keep it refreshing live so downloads and actions
+     *  show up as they happen. */
     private fun showLogs() {
-        // Build the report off the UI thread (the Python call may block briefly),
-        // then show the dialog.
-        worker.execute {
-            val core = try {
-                bridge.callAttr("diagnostics").toString()
+        log("logs: opened")
+        val view = TextView(this).apply {
+            textSize = 12f
+            setPadding(40, 30, 40, 30)
+            movementMethod = ScrollingMovementMethod()
+            setTextIsSelectable(true)
+        }
+        logsView = view
+        refreshLogsView()
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("TARS — logs")
+            .setView(ScrollView(this).apply { addView(view) })
+            .setPositiveButton("Close", null)
+            .create()
+        dialog.setOnDismissListener { logsView = null }
+        dialog.show()
+
+        // Live refresh while the dialog is open.
+        ui.postDelayed(object : Runnable {
+            override fun run() {
+                if (logsView !== view) return   // dialog closed (or replaced)
+                refreshLogsView()
+                ui.postDelayed(this, 600)
+            }
+        }, 600)
+
+        // Fetch core diagnostics without blocking the window (own thread, not the
+        // shared worker, so it shows even mid-download).
+        Thread {
+            lastCore = try {
+                if (::bridge.isInitialized) bridge.callAttr("diagnostics").toString()
+                else "(core still starting…)"
             } catch (e: Exception) {
                 "diagnostics unavailable: ${e.message}"
             }
-            val body = synchronized(this) {
-                "--- core ---\n$core\n\n--- log ---\n$diag"
-            }
-            runOnUiThread {
-                val view = TextView(this).apply {
-                    text = body
-                    textSize = 12f
-                    setPadding(40, 30, 40, 30)
-                    movementMethod = ScrollingMovementMethod()
-                    setTextIsSelectable(true)
-                }
-                AlertDialog.Builder(this)
-                    .setTitle("TARS — logs")
-                    .setView(ScrollView(this@MainActivity).apply { addView(view) })
-                    .setPositiveButton("Close", null)
-                    .show()
-            }
-        }
+        }.start()
+    }
+
+    private fun refreshLogsView() {
+        val body = synchronized(this) { "--- core ---\n$lastCore\n\n--- log ---\n$diag" }
+        logsView?.text = body
     }
 
     override fun onDestroy() {
+        ui.removeCallbacksAndMessages(null)
+        logsView = null
         LlamaServer.stop()
         worker.shutdownNow()
         super.onDestroy()
