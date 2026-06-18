@@ -92,6 +92,14 @@ jobs:
             echo "statically linked; self-contained executable"
           fi
 
+      - name: Fetch sherpa-onnx AAR (offline Piper TTS)
+        run: |
+          set -e
+          mkdir -p android/app/libs
+          curl -fsSL --retry 3 -o android/app/libs/sherpa-onnx.aar \
+            https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.0/sherpa-onnx-1.12.0.aar
+          ls -la android/app/libs
+
       - name: Build debug APK
         # versionCode = run number so every build is "newer"; the in-app updater
         # compares against this.

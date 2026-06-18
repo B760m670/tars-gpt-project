@@ -75,10 +75,11 @@ android {
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
-    // sherpa-onnx (offline TTS engine, runs Piper voices). This community AAR
-    // bundles the official com.k2fsa.sherpa.onnx API + native libs (onnxruntime
-    // included), so no native build step is needed.
-    implementation 'com.bihe0832.android:lib-sherpa-onnx:8.5.4'
+    // Official sherpa-onnx AAR (offline TTS engine that runs Piper voices). It
+    // bundles the com.k2fsa.sherpa.onnx API + native libs (onnxruntime included)
+    // and targets minSdk 21. CI downloads it into app/libs (see the workflow);
+    // resolved via the flatDir repo declared in settings.gradle.
+    implementation(name: 'sherpa-onnx', ext: 'aar')
 }
 
 // Make the repo-root `tars` package available to Chaquopy via the default
