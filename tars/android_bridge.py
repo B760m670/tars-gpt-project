@@ -115,6 +115,20 @@ def active_brain() -> str:
     return _tars.brain.last_used or "auto"
 
 
+def last_brain_report() -> str:
+    """A detailed account of the last reply: which brain answered and why the
+    others were skipped/failed. Surfaced in the log for visibility."""
+    if _tars is None:
+        return "core not started"
+    r = _tars.brain
+    used = r.last_used or "none"
+    tried = getattr(r, "last_errors", None) or []
+    report = "used={}".format(used)
+    if tried:
+        report += " | tried: " + " ; ".join(tried)
+    return report
+
+
 def recommended_model() -> str:
     """The model the device should run, as 'id|filename|url|size_mb', or '' if
     nothing fits (then TARS leans on cloud + the offline brain). The Android

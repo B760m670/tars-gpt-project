@@ -117,9 +117,14 @@ object PiperVoice {
             val samples = CommsFilter.apply(audio.samples, audio.sampleRate)
             if (samples.isEmpty()) return true
             val sr = audio.sampleRate
-            val minBuf = AudioTrack.getMinBufferSize(
+            // Frame size for float mono is 4 bytes; the buffer must be a valid,
+            // frame-aligned size or AudioTrack throws "Invalid audio buffer size".
+            var bufBytes = AudioTrack.getMinBufferSize(
                 sr, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT
-            ).coerceAtLeast(sr)
+            )
+            if (bufBytes <= 0) bufBytes = sr * 4   // ~1s of float mono
+            bufBytes = (bufBytes / 4) * 4
+            if (bufBytes < 4) bufBytes = 4
             val track = AudioTrack(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -130,7 +135,7 @@ object PiperVoice {
                     .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                     .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
                     .build(),
-                minBuf,
+                bufBytes,
                 AudioTrack.MODE_STREAM,
                 AudioManager.AUDIO_SESSION_ID_GENERATE
             )

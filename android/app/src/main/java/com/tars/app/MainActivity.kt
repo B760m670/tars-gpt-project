@@ -35,11 +35,13 @@ import java.util.concurrent.Executors
  */
 class MainActivity : AppCompatActivity() {
 
+    // Fast Python ops only (respond, keys, personality) — kept on one thread so
+    // the shared TARS state is never touched concurrently.
     private val worker = Executors.newSingleThreadExecutor()
-    // Terminal commands run on their own thread so a long command (or a model
-    // download on the worker) never blocks the other.
+    // Heavy, slow work on its OWN threads so it never blocks chat or key-apply
+    // (the 1 GB model download used to stall everything on the worker).
+    private val brainExec = Executors.newSingleThreadExecutor()
     private val termExec = Executors.newSingleThreadExecutor()
-    // Voice synthesis/playback on its own thread, off chat and terminal.
     private val voiceExec = Executors.newSingleThreadExecutor()
     private lateinit var bridge: PyObject
 
@@ -117,7 +119,7 @@ class MainActivity : AppCompatActivity() {
                 dials[0] = p[0].toInt(); dials[1] = p[1].toInt(); dials[2] = p[2].toInt()
                 setState(state)
             } catch (e: Exception) { /* keep defaults */ }
-            autoStartLocalBrain()
+            brainExec.execute { autoStartLocalBrain() }
             // Load the Piper voice if it's already installed.
             PiperVoice.load(this) { line -> log(line) }
             // Check for a newer build in the background.
@@ -140,8 +142,8 @@ class MainActivity : AppCompatActivity() {
                     log("chat error: ${e.message}")
                     "[error] ${e.message}"
                 }
-                val brain = try { bridge.callAttr("active_brain").toString() } catch (e: Exception) { "?" }
-                log("chat: reply via $brain")
+                val report = try { bridge.callAttr("last_brain_report").toString() } catch (e: Exception) { "?" }
+                log("chat: $report")
                 runOnUiThread {
                     log.append("\nTARS> $reply")
                     scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
@@ -158,7 +160,7 @@ class MainActivity : AppCompatActivity() {
      *  on-device llama.cpp brain. Runs on the worker thread; the download is big. */
     private fun setUpLocalBrain() {
         log("brain: setting up on-device engine…")
-        worker.execute {
+        brainExec.execute {
             try {
                 if (!LlamaServer.isSupported(this)) {
                     log("brain: no on-device engine for this CPU (need arm64). Use a key or offline.")
@@ -523,6 +525,7 @@ class MainActivity : AppCompatActivity() {
         PiperVoice.stop()
         LlamaServer.stop()
         worker.shutdownNow()
+        brainExec.shutdownNow()
         termExec.shutdownNow()
         voiceExec.shutdownNow()
         super.onDestroy()
