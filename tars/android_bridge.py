@@ -11,16 +11,30 @@ import os
 from pathlib import Path
 
 _tars = None
+_data_dir = "."
+_term = None
 
 
 def init(data_dir: str) -> bool:
     """Create the TARS instance, storing memory under the app's data dir."""
-    global _tars
+    global _tars, _data_dir
+    _data_dir = data_dir
     os.environ["TARS_MEMORY"] = str(Path(data_dir) / "memory.db")
     from .config import load_settings
     from .core import Tars
     _tars = Tars(load_settings())
     return True
+
+
+def terminal(line: str) -> str:
+    """Run one terminal command (shell, or 'py <code>' for Python) in a session
+    rooted at the app's data dir. Backs the manual terminal now and the agentic
+    mode later."""
+    global _term
+    if _term is None:
+        from .terminal import Terminal
+        _term = Terminal(base_dir=_data_dir)
+    return _term.run(line)
 
 
 def respond(text: str) -> str:

@@ -5,6 +5,37 @@
     android:orientation="vertical"
     android:padding="12dp">
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingBottom="6dp">
+
+        <Button
+            android:id="@+id/brain"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minWidth="0dp"
+            android:text="@string/brain" />
+
+        <Button
+            android:id="@+id/terminal"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minWidth="0dp"
+            android:text="@string/terminal" />
+
+        <Button
+            android:id="@+id/logs"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minWidth="0dp"
+            android:text="@string/logs" />
+    </LinearLayout>
+
     <ScrollView
         android:id="@+id/scroll"
         android:layout_width="match_parent"
@@ -40,19 +71,5 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/send" />
-
-        <Button
-            android:id="@+id/brain"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:text="@string/brain" />
-
-        <Button
-            android:id="@+id/logs"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:text="@string/logs" />
     </LinearLayout>
 </LinearLayout>

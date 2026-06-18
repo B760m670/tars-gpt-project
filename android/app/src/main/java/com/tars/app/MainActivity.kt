@@ -1,12 +1,16 @@
 package com.tars.app
 
 import android.app.AlertDialog
+import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.method.ScrollingMovementMethod
+import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -26,6 +30,9 @@ import java.util.concurrent.Executors
 class MainActivity : AppCompatActivity() {
 
     private val worker = Executors.newSingleThreadExecutor()
+    // Terminal commands run on their own thread so a long command (or a model
+    // download on the worker) never blocks the other.
+    private val termExec = Executors.newSingleThreadExecutor()
     private lateinit var bridge: PyObject
 
     private val diag = StringBuilder()
@@ -48,12 +55,14 @@ class MainActivity : AppCompatActivity() {
         val send = findViewById<Button>(R.id.send)
         val logsBtn = findViewById<Button>(R.id.logs)
         val brainBtn = findViewById<Button>(R.id.brain)
+        val terminalBtn = findViewById<Button>(R.id.terminal)
         val log = findViewById<TextView>(R.id.log)
         val scroll = findViewById<ScrollView>(R.id.scroll)
 
         log.text = getString(R.string.greeting)
         logsBtn.setOnClickListener { showLogs() }
         brainBtn.setOnClickListener { setUpLocalBrain() }
+        terminalBtn.setOnClickListener { showTerminal() }
 
         worker.execute {
             try {
@@ -190,11 +199,69 @@ class MainActivity : AppCompatActivity() {
         logsView?.text = body
     }
 
+    /** A TARS terminal: type a shell command, or `py <code>` for Python. Runs in
+     *  the app's sandbox (no root) via the Python bridge. */
+    private fun showTerminal() {
+        log("terminal: opened")
+        val output = TextView(this).apply {
+            textSize = 12f
+            typeface = Typeface.MONOSPACE
+            setTextIsSelectable(true)
+            setPadding(24, 16, 24, 16)
+            text = "TARS terminal — sandbox shell. Type a command, or 'py <code>' for Python.\n"
+        }
+        val scroll = ScrollView(this).apply { addView(output) }
+        val input = EditText(this).apply {
+            hint = getString(R.string.terminal_hint)
+            setSingleLine(true)
+        }
+        val runBtn = Button(this).apply { text = getString(R.string.run) }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(input, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(runBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        val rootView = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(row)
+        }
+
+        fun submit() {
+            val cmd = input.text.toString().trim()
+            if (cmd.isEmpty()) return
+            input.setText("")
+            output.append("\n$ $cmd\n")
+            log("terminal: $ $cmd")
+            scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+            termExec.execute {
+                val out = try {
+                    bridge.callAttr("terminal", cmd).toString()
+                } catch (e: Exception) {
+                    "error: ${e.message}"
+                }
+                runOnUiThread {
+                    output.append(out.trimEnd() + "\n")
+                    scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+                }
+            }
+        }
+        runBtn.setOnClickListener { submit() }
+        input.setOnEditorActionListener { _, _, _ -> submit(); true }
+
+        AlertDialog.Builder(this)
+            .setTitle("TARS — terminal")
+            .setView(rootView)
+            .setPositiveButton("Close", null)
+            .show()
+    }
+
     override fun onDestroy() {
         ui.removeCallbacksAndMessages(null)
         logsView = null
         LlamaServer.stop()
         worker.shutdownNow()
+        termExec.shutdownNow()
         super.onDestroy()
     }
 }
