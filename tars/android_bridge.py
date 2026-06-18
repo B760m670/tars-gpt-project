@@ -37,6 +37,28 @@ def terminal(line: str) -> str:
     return _term.run(line)
 
 
+def extract_voice(archive: str, dest: str) -> str:
+    """Unpack a sherpa-onnx Piper voice .tar.bz2 (Python has bz2 + tar built in,
+    Android/Java doesn't) and return 'model|tokens|dataDir' for the Kotlin TTS
+    engine. dataDir is the espeak-ng-data folder Piper needs for phonemes."""
+    import glob
+    import tarfile
+
+    os.makedirs(dest, exist_ok=True)
+    with tarfile.open(archive, "r:bz2") as tar:
+        tar.extractall(dest)
+
+    def first(pattern):
+        hits = glob.glob(os.path.join(dest, "**", pattern), recursive=True)
+        return hits[0] if hits else ""
+
+    onnx = first("*.onnx")
+    tokens = first("tokens.txt")
+    data_dirs = glob.glob(os.path.join(dest, "**", "espeak-ng-data"), recursive=True)
+    data_dir = data_dirs[0] if data_dirs else ""
+    return "|".join([onnx, tokens, data_dir])
+
+
 def respond(text: str) -> str:
     if _tars is None:
         init(".")

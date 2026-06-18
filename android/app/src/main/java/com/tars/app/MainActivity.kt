@@ -36,6 +36,8 @@ class MainActivity : AppCompatActivity() {
     // Terminal commands run on their own thread so a long command (or a model
     // download on the worker) never blocks the other.
     private val termExec = Executors.newSingleThreadExecutor()
+    // Voice synthesis/playback on its own thread, off chat and terminal.
+    private val voiceExec = Executors.newSingleThreadExecutor()
     private lateinit var bridge: PyObject
 
     private val diag = StringBuilder()
@@ -73,10 +75,12 @@ class MainActivity : AppCompatActivity() {
         terminalBtn.setOnClickListener { showTerminal() }
         voiceBtn.setOnClickListener {
             speaker.enabled = !speaker.enabled
-            if (!speaker.enabled) speaker.stop()
+            if (!speaker.enabled) { speaker.stop(); PiperVoice.stop() }
             voiceBtn.text = getString(if (speaker.enabled) R.string.voice else R.string.muted)
             log("voice: ${if (speaker.enabled) "on" else "muted"}")
         }
+        voiceBtn.setOnLongClickListener { installPiperVoice(); true }
+        log("voice: long-press Voice to install the deep TARS voice (~30 MB)")
 
         worker.execute {
             try {
@@ -90,6 +94,8 @@ class MainActivity : AppCompatActivity() {
             // If a local model is already downloaded, bring the on-device brain
             // up automatically so TARS thinks offline from launch.
             autoStartLocalBrain()
+            // Load the Piper voice if it's already installed.
+            PiperVoice.load(this) { line -> log(line) }
             // Check for a newer build in the background.
             Updater.checkAndPrompt(this) { line -> log(line) }
         }
@@ -114,7 +120,7 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     log.append("\nTARS> $reply")
                     scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
-                    if (!reply.startsWith("[error]")) speaker.speak(reply)
+                    if (!reply.startsWith("[error]")) speakReply(reply)
                 }
             }
         }
@@ -237,6 +243,34 @@ class MainActivity : AppCompatActivity() {
 
     /** A TARS terminal: type a shell command, or `py <code>` for Python. Runs in
      *  the app's sandbox (no root) via the Python bridge. */
+    private val cyrillic = Regex("[А-Яа-яЁё]")
+
+    /** Speak a reply: the Piper voice for Russian if installed, else system TTS. */
+    private fun speakReply(text: String) {
+        if (!speaker.enabled) return
+        if (PiperVoice.isReady() && cyrillic.containsMatchIn(text)) {
+            voiceExec.execute { PiperVoice.speak(text) { l -> log(l) } }
+        } else {
+            speaker.speak(text)
+        }
+    }
+
+    /** Long-press on Voice: download + install the deep Piper voice (one time). */
+    private fun installPiperVoice() {
+        if (PiperVoice.isReady()) {
+            log("voice: Piper voice already installed")
+            return
+        }
+        log("voice: installing TARS voice…")
+        voiceExec.execute {
+            if (::bridge.isInitialized) {
+                PiperVoice.install(this, bridge) { l -> log(l) }
+            } else {
+                log("voice: core still starting — try again in a moment")
+            }
+        }
+    }
+
     private fun showTerminal() {
         log("terminal: opened")
         val output = TextView(this).apply {
@@ -296,9 +330,11 @@ class MainActivity : AppCompatActivity() {
         ui.removeCallbacksAndMessages(null)
         logsView = null
         if (::speaker.isInitialized) speaker.shutdown()
+        PiperVoice.stop()
         LlamaServer.stop()
         worker.shutdownNow()
         termExec.shutdownNow()
+        voiceExec.shutdownNow()
         super.onDestroy()
     }
 }
