@@ -39,9 +39,27 @@ android {
         jvmTarget = '11'
     }
 
+    // A fixed keystore committed to the repo so EVERY build (here and in CI) is
+    // signed with the same key. Without this, each CI run signs with a fresh
+    // ephemeral debug key, and Android refuses to update across mismatched
+    // signatures ("conflicts with another package"). It's a debug-grade key —
+    // fine to be public for a self-distributed app.
+    signingConfigs {
+        tars {
+            storeFile file('tars.keystore')
+            storePassword 'tarspass'
+            keyAlias 'tars'
+            keyPassword 'tarspass'
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig signingConfigs.tars
+        }
         release {
             minifyEnabled false
+            signingConfig signingConfigs.tars
         }
     }
 
