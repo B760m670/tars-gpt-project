@@ -78,6 +78,29 @@ def extract_voice(archive: str, dest: str) -> str:
     return "|".join([onnx, tokens, data_dir])
 
 
+def get_personality() -> str:
+    """Current dials as 'humor|honesty|discretion|sarcasm' for the settings UI."""
+    if _tars is None:
+        return "75|90|70|30"
+    p = _tars.settings.personality
+    return "|".join(str(v) for v in (p.humor, p.honesty, p.discretion, p.sarcasm))
+
+
+def set_personality(humor: int, honesty: int, discretion: int, sarcasm: int) -> str:
+    """Live-update the TARS dials (the in-film 'settings bench'). No rebuild
+    needed — the prompt reads them fresh on every reply."""
+    if _tars is None:
+        return ""
+    p = _tars.settings.personality
+    p.humor = max(0, min(100, int(humor)))
+    p.honesty = max(0, min(100, int(honesty)))
+    p.discretion = max(0, min(100, int(discretion)))
+    p.sarcasm = max(0, min(100, int(sarcasm)))
+    return "humor {}%, honesty {}%, discretion {}%, sarcasm {}%".format(
+        p.humor, p.honesty, p.discretion, p.sarcasm
+    )
+
+
 def respond(text: str) -> str:
     if _tars is None:
         init(".")

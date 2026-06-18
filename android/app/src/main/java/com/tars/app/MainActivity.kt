@@ -9,12 +9,15 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.method.ScrollingMovementMethod
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.chaquo.python.PyObject
@@ -272,6 +275,66 @@ class MainActivity : AppCompatActivity() {
             } else {
                 log("voice: core still starting — try again in a moment")
             }
+        }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menu.add(0, 1, 0, "Personality")
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == 1) { showDials(); return true }
+        return super.onOptionsItemSelected(item)
+    }
+
+    /** The TARS "settings bench": live sliders for Humor / Honesty / Discretion /
+     *  Sarcasm, tuned exactly like Cooper tunes him in the film. */
+    private fun showDials() {
+        worker.execute {
+            val raw = try { bridge.callAttr("get_personality").toString() } catch (e: Exception) { "75|90|70|30" }
+            val v = raw.split("|").map { it.toIntOrNull() ?: 50 }
+            runOnUiThread { buildDialsDialog(v) }
+        }
+    }
+
+    private fun buildDialsDialog(initial: List<Int>) {
+        val names = listOf("Humor", "Honesty", "Discretion", "Sarcasm")
+        val cur = IntArray(4) { initial.getOrElse(it) { 50 } }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 24, 48, 0)
+        }
+        for (i in 0 until 4) {
+            val label = TextView(this).apply { text = "${names[i]}: ${cur[i]}%"; textSize = 14f }
+            val bar = SeekBar(this).apply {
+                max = 100
+                progress = cur[i]
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(s: SeekBar?, value: Int, fromUser: Boolean) {
+                        cur[i] = value
+                        label.text = "${names[i]}: $value%"
+                    }
+                    override fun onStartTrackingTouch(s: SeekBar?) {}
+                    override fun onStopTrackingTouch(s: SeekBar?) { applyDials(cur) }
+                })
+            }
+            root.addView(label)
+            root.addView(bar)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("TARS — settings")
+            .setView(ScrollView(this).apply { addView(root) })
+            .setPositiveButton("Done") { _, _ -> applyDials(cur) }
+            .show()
+    }
+
+    private fun applyDials(v: IntArray) {
+        worker.execute {
+            val msg = try {
+                bridge.callAttr("set_personality", v[0], v[1], v[2], v[3]).toString()
+            } catch (e: Exception) { "error: ${e.message}" }
+            log("settings: $msg")
         }
     }
 

@@ -21,6 +21,7 @@ HELP = """\
 commands:
   /humor N      set humor 0-100 (live, like the film)
   /honesty N    set honesty 0-100
+  /discretion N set discretion 0-100
   /sarcasm N    set sarcasm 0-100
   /settings     show current dials and active brain
   /remember k=v store a fact TARS should keep (e.g. /remember name=Cooper)
@@ -74,11 +75,13 @@ def handle_command(cmd: str, tars: Tars, settings: Settings) -> bool:
         p.humor = _clamp(arg); print("[humor = {}%]".format(p.humor))
     elif name == "/honesty" and arg:
         p.honesty = _clamp(arg); print("[honesty = {}%]".format(p.honesty))
+    elif name == "/discretion" and arg:
+        p.discretion = _clamp(arg); print("[discretion = {}%]".format(p.discretion))
     elif name == "/sarcasm" and arg:
         p.sarcasm = _clamp(arg); print("[sarcasm = {}%]".format(p.sarcasm))
     elif name == "/settings":
-        print("[humor={}% honesty={}% sarcasm={}% | brain={}]".format(
-            p.humor, p.honesty, p.sarcasm, tars.brain.last_used or "auto"))
+        print("[humor={}% honesty={}% discretion={}% sarcasm={}% | brain={}]".format(
+            p.humor, p.honesty, p.discretion, p.sarcasm, tars.brain.last_used or "auto"))
     elif name == "/remember":
         kv = cmd.split(" ", 1)[1] if " " in cmd else ""
         key, _, value = kv.partition("=")

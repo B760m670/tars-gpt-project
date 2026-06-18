@@ -44,9 +44,10 @@ def _int(name: str, default: int) -> int:
 
 @dataclass
 class Personality:
-    """The famous TARS dials. Mutable at runtime via CLI commands."""
-    humor: int = 90
+    """The famous TARS dials. Mutable at runtime via CLI commands / the app."""
+    humor: int = 75
     honesty: int = 90
+    discretion: int = 70
     sarcasm: int = 30
     name: str = "TARS"
 
@@ -70,8 +71,9 @@ class Settings:
 def load_settings() -> Settings:
     _load_dotenv(Path(".env"))
     personality = Personality(
-        humor=_int("TARS_HUMOR", 90),
+        humor=_int("TARS_HUMOR", 75),
         honesty=_int("TARS_HONESTY", 90),
+        discretion=_int("TARS_DISCRETION", 70),
         sarcasm=_int("TARS_SARCASM", 30),
         name=os.environ.get("TARS_NAME", "TARS"),
     )
