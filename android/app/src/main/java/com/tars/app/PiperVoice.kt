@@ -114,7 +114,7 @@ object PiperVoice {
         try {
             stop()
             val audio = engine.generate(text = text, sid = 0, speed = 0.95f)
-            val samples = audio.samples
+            val samples = CommsFilter.apply(audio.samples, audio.sampleRate)
             if (samples.isEmpty()) return true
             val sr = audio.sampleRate
             val minBuf = AudioTrack.getMinBufferSize(
