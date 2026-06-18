@@ -29,6 +29,19 @@ object LlamaServer {
 
     fun isRunning(): Boolean = process?.isAlive == true
 
+    fun logFile(ctx: Context): File = File(ctx.filesDir, "llama-server.log")
+
+    /** Last few lines of the server's own log — the place its errors land. */
+    fun tailLog(ctx: Context, lines: Int = 8): String {
+        val f = logFile(ctx)
+        if (!f.exists()) return "(no server log yet)"
+        return try {
+            f.readLines().takeLast(lines).joinToString("\n").ifBlank { "(server log empty)" }
+        } catch (e: Exception) {
+            "(can't read server log: ${e.message})"
+        }
+    }
+
     /** Download a GGUF model with coarse progress logging. Returns the file. */
     fun downloadModel(url: String, dest: File, log: (String) -> Unit): File {
         if (dest.exists() && dest.length() > 0) {
@@ -88,9 +101,42 @@ object LlamaServer {
             "-t", threads.toString()
         )
         pb.redirectErrorStream(true)
-        pb.redirectOutput(File(ctx.filesDir, "llama-server.log"))
-        process = pb.start()
+        pb.redirectOutput(logFile(ctx))
+        val proc = pb.start()
+        process = proc
         log("brain: llama-server starting on 127.0.0.1:8080 (model loads in a few seconds)")
+
+        // Watch startup and report the outcome — otherwise a crash is invisible
+        // and TARS silently stays on the offline brain.
+        Thread {
+            for (i in 1..90) {
+                Thread.sleep(1000)
+                if (!proc.isAlive) {
+                    val code = try { proc.exitValue() } catch (e: Exception) { -1 }
+                    log("brain: engine exited (code $code). Server log:\n${tailLog(ctx)}")
+                    return@Thread
+                }
+                if (health()) {
+                    log("brain: local engine READY — TARS now thinks on-device. Say something.")
+                    return@Thread
+                }
+            }
+            log("brain: engine didn't become ready in 90s. Server log:\n${tailLog(ctx)}")
+        }.start()
+    }
+
+    /** True once llama-server answers /health with status ok (200). */
+    private fun health(): Boolean {
+        return try {
+            val c = URL("http://127.0.0.1:8080/health").openConnection() as HttpURLConnection
+            c.connectTimeout = 1500
+            c.readTimeout = 1500
+            val code = c.responseCode
+            c.disconnect()
+            code == 200
+        } catch (e: Exception) {
+            false
+        }
     }
 
     fun stop() {
