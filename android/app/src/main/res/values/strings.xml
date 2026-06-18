@@ -4,6 +4,8 @@
     <string name="send">Send</string>
     <string name="brain">Brain</string>
     <string name="terminal">Terminal</string>
+    <string name="voice">Voice</string>
+    <string name="muted">Muted</string>
     <string name="logs">Logs</string>
     <string name="input_hint">Say something to TARS…</string>
     <string name="terminal_hint">command, or: py &lt;code&gt;…</string>

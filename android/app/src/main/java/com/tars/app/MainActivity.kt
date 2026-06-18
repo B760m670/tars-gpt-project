@@ -42,6 +42,8 @@ class MainActivity : AppCompatActivity() {
     private var logsView: TextView? = null      // non-null while the Logs dialog is open
     @Volatile private var lastCore = "(loading…)"
 
+    private lateinit var speaker: Speaker
+
     @Synchronized
     private fun log(line: String) {
         diag.append(clock.format(Date())).append("  ").append(line).append('\n')
@@ -56,13 +58,22 @@ class MainActivity : AppCompatActivity() {
         val logsBtn = findViewById<Button>(R.id.logs)
         val brainBtn = findViewById<Button>(R.id.brain)
         val terminalBtn = findViewById<Button>(R.id.terminal)
+        val voiceBtn = findViewById<Button>(R.id.voice)
         val log = findViewById<TextView>(R.id.log)
         val scroll = findViewById<ScrollView>(R.id.scroll)
+
+        speaker = Speaker(this) { line -> log(line) }
 
         log.text = getString(R.string.greeting)
         logsBtn.setOnClickListener { showLogs() }
         brainBtn.setOnClickListener { setUpLocalBrain() }
         terminalBtn.setOnClickListener { showTerminal() }
+        voiceBtn.setOnClickListener {
+            speaker.enabled = !speaker.enabled
+            if (!speaker.enabled) speaker.stop()
+            voiceBtn.text = getString(if (speaker.enabled) R.string.voice else R.string.muted)
+            log("voice: ${if (speaker.enabled) "on" else "muted"}")
+        }
 
         worker.execute {
             try {
@@ -100,6 +111,7 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     log.append("\nTARS> $reply")
                     scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
+                    if (!reply.startsWith("[error]")) speaker.speak(reply)
                 }
             }
         }
@@ -259,6 +271,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         ui.removeCallbacksAndMessages(null)
         logsView = null
+        if (::speaker.isInitialized) speaker.shutdown()
         LlamaServer.stop()
         worker.shutdownNow()
         termExec.shutdownNow()
