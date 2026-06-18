@@ -85,7 +85,7 @@ class MainActivity : AppCompatActivity() {
         }
         voiceBtn.setOnLongClickListener { installPiperVoice(); true }
         keyBtn.setOnClickListener { showKeyDialog() }
-        log("voice: long-press Voice to install the deep TARS voice (~30 MB)")
+        log("voice: long-press Voice to install the deep TARS voices, RU + EN (~60 MB)")
 
         worker.execute {
             try {
@@ -252,23 +252,25 @@ class MainActivity : AppCompatActivity() {
      *  the app's sandbox (no root) via the Python bridge. */
     private val cyrillic = Regex("[А-Яа-яЁё]")
 
-    /** Speak a reply: the Piper voice for Russian if installed, else system TTS. */
+    /** Speak a reply with the deep Piper voice for its language; fall back to
+     *  system TTS if that voice isn't installed. */
     private fun speakReply(text: String) {
         if (!speaker.enabled) return
-        if (PiperVoice.isReady() && cyrillic.containsMatchIn(text)) {
-            voiceExec.execute { PiperVoice.speak(text) { l -> log(l) } }
+        val lang = if (cyrillic.containsMatchIn(text)) "ru" else "en"
+        if (PiperVoice.isReady(lang)) {
+            voiceExec.execute {
+                val ok = PiperVoice.speak(text, lang) { l -> log(l) }
+                if (!ok) runOnUiThread { speaker.speak(text) }
+            }
         } else {
             speaker.speak(text)
         }
     }
 
-    /** Long-press on Voice: download + install the deep Piper voice (one time). */
+    /** Long-press on Voice: download + install the deep Piper voices (one time,
+     *  RU + EN). Idempotent — installs only what's missing. */
     private fun installPiperVoice() {
-        if (PiperVoice.isReady()) {
-            log("voice: Piper voice already installed")
-            return
-        }
-        log("voice: installing TARS voice…")
+        log("voice: installing TARS voices (RU + EN)…")
         voiceExec.execute {
             if (::bridge.isInitialized) {
                 PiperVoice.install(this, bridge) { l -> log(l) }

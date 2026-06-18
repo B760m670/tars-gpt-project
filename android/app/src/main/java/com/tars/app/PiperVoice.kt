@@ -16,81 +16,86 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Voice driver #2: a real Piper voice via sherpa-onnx (offline, on-device). A
- * deep male Russian voice — far closer to TARS than the robotic system TTS.
+ * Voice driver #2: real Piper voices via sherpa-onnx (offline, on-device). Deep
+ * male voices — far closer to TARS than the robotic system TTS — one per
+ * language (Russian + English), routed by the text.
  *
- * The ~30 MB voice model is downloaded once and unpacked (the .tar.bz2 is
- * extracted by the embedded Python, since Java has no bz2). Synthesis returns
- * float PCM which we play through an AudioTrack.
+ * Each ~30 MB voice is downloaded once and its .tar.bz2 unpacked by the embedded
+ * Python (Java has no bz2). Synthesis returns float PCM played via AudioTrack.
  */
 object PiperVoice {
 
-    // A deep male Russian Piper voice from sherpa-onnx's model release.
-    private const val URL =
-        "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-ru_RU-ruslan-medium.tar.bz2"
+    // Deep male Piper voices from sherpa-onnx's model release, by language.
+    private val URLS = mapOf(
+        "ru" to "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-ru_RU-ruslan-medium.tar.bz2",
+        "en" to "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-ryan-medium.tar.bz2",
+    )
 
-    @Volatile private var tts: OfflineTts? = null
+    private val engines = HashMap<String, OfflineTts>()
     @Volatile private var current: AudioTrack? = null
 
-    fun isReady(): Boolean = tts != null
+    fun isReady(lang: String): Boolean = engines.containsKey(lang)
+    fun isAnyReady(): Boolean = engines.isNotEmpty()
 
-    private fun dir(ctx: Context): File = File(ctx.filesDir, "voice").apply { mkdirs() }
-    private fun marker(ctx: Context): File = File(dir(ctx), "paths.txt")
+    private fun root(ctx: Context): File = File(ctx.filesDir, "voice").apply { mkdirs() }
+    private fun langDir(ctx: Context, lang: String): File = File(root(ctx), lang).apply { mkdirs() }
+    private fun marker(ctx: Context, lang: String): File = File(langDir(ctx, lang), "paths.txt")
 
-    fun isInstalled(ctx: Context): Boolean = marker(ctx).exists()
-
-    /** Load an already-installed voice (fast path on launch). */
-    fun load(ctx: Context, log: (String) -> Unit): Boolean {
-        if (tts != null) return true
-        val m = marker(ctx)
-        if (!m.exists()) return false
-        return try {
-            val (onnx, tokens, data) = m.readText().split("|").let {
-                Triple(it[0], it.getOrElse(1) { "" }, it.getOrElse(2) { "" })
+    /** Load any already-installed voices (fast path on launch). */
+    fun load(ctx: Context, log: (String) -> Unit) {
+        for (lang in URLS.keys) {
+            if (engines.containsKey(lang)) continue
+            val m = marker(ctx, lang)
+            if (!m.exists()) continue
+            try {
+                val (onnx, tokens, data) = m.readText().split("|").let {
+                    Triple(it[0], it.getOrElse(1) { "" }, it.getOrElse(2) { "" })
+                }
+                if (File(onnx).exists()) {
+                    engines[lang] = buildTts(onnx, tokens, data)
+                    log("voice: $lang Piper voice ready")
+                }
+            } catch (e: Exception) {
+                log("voice: failed to load $lang Piper — ${e.message}")
             }
-            if (!File(onnx).exists()) { log("voice: model files missing, re-install needed"); return false }
-            buildTts(onnx, tokens, data)
-            log("voice: Piper voice ready")
-            true
-        } catch (e: Exception) {
-            log("voice: failed to load Piper — ${e.message}")
-            false
         }
     }
 
-    /** Download + unpack + load the Piper voice (one time). Heavy; call off the UI thread. */
+    /** Download + unpack + load both voices (one time). Heavy; call off the UI thread. */
     fun install(ctx: Context, bridge: PyObject, log: (String) -> Unit) {
         try {
             System.loadLibrary("sherpa-onnx-jni")
         } catch (e: Throwable) {
             // The AAR usually self-loads; ignore if already loaded.
         }
-        try {
-            val archive = File(dir(ctx), "voice.tar.bz2")
-            if (!archive.exists() || archive.length() == 0L) {
-                log("voice: downloading TARS voice (~30 MB)…")
-                download(URL, archive, log)
+        for ((lang, url) in URLS) {
+            if (engines.containsKey(lang)) continue
+            try {
+                val archive = File(langDir(ctx, lang), "voice.tar.bz2")
+                if (!archive.exists() || archive.length() == 0L) {
+                    log("voice: downloading $lang voice (~30 MB)…")
+                    download(url, archive, log)
+                }
+                log("voice: unpacking $lang…")
+                val paths = bridge.callAttr("extract_voice", archive.absolutePath, langDir(ctx, lang).absolutePath).toString()
+                val parts = paths.split("|")
+                val onnx = parts.getOrElse(0) { "" }
+                if (onnx.isBlank() || !File(onnx).exists()) {
+                    log("voice: $lang unpack failed (no .onnx)")
+                    continue
+                }
+                engines[lang] = buildTts(onnx, parts.getOrElse(1) { "" }, parts.getOrElse(2) { "" })
+                marker(ctx, lang).writeText(paths)
+                archive.delete()
+                log("voice: $lang voice installed and ready")
+            } catch (e: Exception) {
+                log("voice: $lang install failed — ${e.message}")
             }
-            log("voice: unpacking…")
-            val paths = bridge.callAttr("extract_voice", archive.absolutePath, dir(ctx).absolutePath).toString()
-            val parts = paths.split("|")
-            val onnx = parts.getOrElse(0) { "" }
-            val tokens = parts.getOrElse(1) { "" }
-            val data = parts.getOrElse(2) { "" }
-            if (onnx.isBlank() || !File(onnx).exists()) {
-                log("voice: unpack failed (no .onnx found)")
-                return
-            }
-            buildTts(onnx, tokens, data)
-            marker(ctx).writeText("$onnx|$tokens|$data")
-            archive.delete()
-            log("voice: Piper voice installed and ready — TARS speaks with it now.")
-        } catch (e: Exception) {
-            log("voice: install failed — ${e.message}")
         }
+        log("voice: TARS now speaks with the Piper voice(s).")
     }
 
-    private fun buildTts(onnx: String, tokens: String, dataDir: String) {
+    private fun buildTts(onnx: String, tokens: String, dataDir: String): OfflineTts {
         val config = OfflineTtsConfig(
             model = OfflineTtsModelConfig(
                 vits = OfflineTtsVitsModelConfig(model = onnx, tokens = tokens, dataDir = dataDir),
@@ -99,17 +104,18 @@ object PiperVoice {
                 provider = "cpu",
             )
         )
-        tts = OfflineTts(config = config)
+        return OfflineTts(config = config)
     }
 
-    /** Synthesize and play. Blocks until playback finishes; call off the UI thread. */
-    fun speak(text: String, log: (String) -> Unit) {
-        val engine = tts ?: return
+    /** Synthesize + play in the given language. Returns false if no voice for it
+     *  (so the caller can fall back to system TTS). Call off the UI thread. */
+    fun speak(text: String, lang: String, log: (String) -> Unit): Boolean {
+        val engine = engines[lang] ?: return false
         try {
             stop()
             val audio = engine.generate(text = text, sid = 0, speed = 0.95f)
             val samples = audio.samples
-            if (samples.isEmpty()) return
+            if (samples.isEmpty()) return true
             val sr = audio.sampleRate
             val minBuf = AudioTrack.getMinBufferSize(
                 sr, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT
@@ -137,6 +143,7 @@ object PiperVoice {
         } catch (e: Exception) {
             log("voice: synthesis error — ${e.message}")
         }
+        return true
     }
 
     fun stop() {
