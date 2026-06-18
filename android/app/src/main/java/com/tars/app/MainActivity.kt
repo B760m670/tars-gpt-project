@@ -52,6 +52,13 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var speaker: Speaker
 
+    // Canon HUD: status line, cue light, and a speaking VU meter.
+    private lateinit var statusView: TextView
+    private lateinit var cueView: View
+    private val vuBars = ArrayList<View>()
+    private val dials = intArrayOf(75, 90, 70)   // humor, honesty, discretion
+    @Volatile private var state = "STANDBY"
+
     @Synchronized
     private fun log(line: String) {
         diag.append(clock.format(Date())).append("  ").append(line).append('\n')
@@ -70,6 +77,11 @@ class MainActivity : AppCompatActivity() {
         val keyBtn = findViewById<Button>(R.id.key)
         val log = findViewById<TextView>(R.id.log)
         val scroll = findViewById<ScrollView>(R.id.scroll)
+
+        statusView = findViewById(R.id.status)
+        cueView = findViewById(R.id.cue)
+        buildVu(findViewById(R.id.vu))
+        setState("STANDBY")
 
         speaker = Speaker(this) { line -> log(line) }
 
@@ -100,6 +112,11 @@ class MainActivity : AppCompatActivity() {
             // up automatically so TARS thinks offline from launch.
             // Apply any saved cloud keys so the smart brain is on from launch.
             applySavedKeys()
+            try {
+                val p = bridge.callAttr("get_personality").toString().split("|")
+                dials[0] = p[0].toInt(); dials[1] = p[1].toInt(); dials[2] = p[2].toInt()
+                setState(state)
+            } catch (e: Exception) { /* keep defaults */ }
             autoStartLocalBrain()
             // Load the Piper voice if it's already installed.
             PiperVoice.load(this) { line -> log(line) }
@@ -114,6 +131,7 @@ class MainActivity : AppCompatActivity() {
             log.append("\n\nyou> $text")
             log("chat: sent \"${text.take(40)}\"")
             scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
+            setState("THINKING")
 
             worker.execute {
                 val reply = try {
@@ -128,6 +146,9 @@ class MainActivity : AppCompatActivity() {
                     log.append("\nTARS> $reply")
                     scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
                     if (!reply.startsWith("[error]")) speakReply(reply)
+                    setState("TALKING")
+                    val ms = (reply.length * 55L).coerceIn(1500L, 12000L)
+                    ui.postDelayed({ if (state == "TALKING") setState("STANDBY") }, ms)
                 }
             }
         }
@@ -332,12 +353,56 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyDials(v: IntArray) {
+        dials[0] = v[0]; dials[1] = v[1]; dials[2] = v[2]
+        setState(state)
         worker.execute {
             val msg = try {
                 bridge.callAttr("set_personality", v[0], v[1], v[2], v[3]).toString()
             } catch (e: Exception) { "error: ${e.message}" }
             log("settings: $msg")
         }
+    }
+
+    // ---- Canon HUD: status line, cue light, speaking VU meter ----
+
+    private fun buildVu(vu: LinearLayout) {
+        vuBars.clear()
+        repeat(20) {
+            val bar = View(this)
+            bar.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+                .apply { marginEnd = 4 }
+            bar.setBackgroundColor(0xFF7A5A00.toInt())
+            bar.scaleY = 0.08f
+            vu.addView(bar)
+            vuBars.add(bar)
+        }
+    }
+
+    private fun setState(s: String) {
+        state = s
+        runOnUiThread {
+            statusView.text = "TARS · $s · H${dials[0]} HON${dials[1]} D${dials[2]}"
+            cueView.setBackgroundColor(if (s == "TALKING") 0xFFFFB000.toInt() else 0xFF3A2A00.toInt())
+            if (s == "TALKING") startVu() else stopVu()
+        }
+    }
+
+    private val vuTick = object : Runnable {
+        override fun run() {
+            if (state != "TALKING") return
+            for (b in vuBars) {
+                b.pivotY = b.height.toFloat()
+                b.scaleY = 0.12f + Math.random().toFloat() * 0.88f
+            }
+            ui.postDelayed(this, 90)
+        }
+    }
+
+    private fun startVu() { ui.removeCallbacks(vuTick); ui.post(vuTick) }
+
+    private fun stopVu() {
+        ui.removeCallbacks(vuTick)
+        for (b in vuBars) { b.pivotY = b.height.toFloat(); b.scaleY = 0.08f }
     }
 
     private fun prefs() = getSharedPreferences("tars", MODE_PRIVATE)

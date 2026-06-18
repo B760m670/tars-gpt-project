@@ -53,6 +53,32 @@
             android:text="@string/logs" />
     </LinearLayout>
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="2dp"
+        android:paddingBottom="6dp">
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="monospace"
+            android:textSize="12sp"
+            android:textColor="#FFC56306"
+            android:text="TARS · STANDBY" />
+
+        <View
+            android:id="@+id/cue"
+            android:layout_width="10dp"
+            android:layout_height="10dp"
+            android:layout_marginStart="8dp"
+            android:background="#FF3A2A00" />
+    </LinearLayout>
+
     <ScrollView
         android:id="@+id/scroll"
         android:layout_width="match_parent"
@@ -68,6 +94,14 @@
             android:textColor="#FFFFB000"
             android:textIsSelectable="true" />
     </ScrollView>
+
+    <LinearLayout
+        android:id="@+id/vu"
+        android:layout_width="match_parent"
+        android:layout_height="22dp"
+        android:orientation="horizontal"
+        android:gravity="bottom"
+        android:paddingTop="4dp" />
 
     <LinearLayout
         android:layout_width="match_parent"
