@@ -1,0 +1,20 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+        maven { url "https://chaquo.com/maven" }
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+        // The official sherpa-onnx AAR is downloaded by CI into app/libs.
+        flatDir { dirs "$rootDir/app/libs" }
+    }
+}
+
+rootProject.name = "TARS"
+include ':app'

@@ -1,0 +1,10 @@
+// Top-level build file. Versions are pinned to keep ANDROID 5 (minSdk 21)
+// support: Chaquopy 16+ requires minSdk 24 (Android 7), so we stay on Chaquopy
+// 15. To avoid Gradle 8's strict task-dependency validation (which Chaquopy 15
+// trips), we also stay on the pre-Gradle-8 toolchain where that check is only a
+// warning: AGP 7.4 + Gradle 7.6 + Kotlin 1.8.
+plugins {
+    id 'com.android.application' version '7.4.2' apply false
+    id 'org.jetbrains.kotlin.android' version '1.8.22' apply false
+    id 'com.chaquo.python' version '15.0.1' apply false
+}

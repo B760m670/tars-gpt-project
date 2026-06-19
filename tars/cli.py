@@ -4,6 +4,7 @@ Run:  python -m tars
 """
 from __future__ import annotations
 
+from . import models
 from .brains import BrainError
 from .config import Settings, load_settings
 from .core import Tars
@@ -20,10 +21,12 @@ HELP = """\
 commands:
   /humor N      set humor 0-100 (live, like the film)
   /honesty N    set honesty 0-100
+  /discretion N set discretion 0-100
   /sarcasm N    set sarcasm 0-100
   /settings     show current dials and active brain
   /remember k=v store a fact TARS should keep (e.g. /remember name=Cooper)
   /facts        list remembered facts
+  /models       on-device brain models (light->heavy) + what fits this device
   /help         this help
   /quit         power down\
 """
@@ -35,6 +38,25 @@ def _clamp(text: str) -> int:
     except ValueError:
         return 0
     return max(0, min(100, value))
+
+
+def print_models() -> None:
+    ram = models.total_ram_mb()
+    pick = models.recommend(ram)
+    ram_str = "{} MB".format(ram) if ram else "unknown"
+    print("on-device brain models (free, offline, llama.cpp) — device RAM: {}".format(ram_str))
+    for spec in models.CATALOG:
+        if ram and models.fits(spec, ram):
+            mark = "<- recommended" if pick and spec.id == pick.id else "fits"
+        elif ram:
+            mark = "too heavy"
+        else:
+            mark = ""
+        print("  {:<9} {:<5} {:>5} MB file  needs ~{} MB RAM   {}".format(
+            spec.label, spec.params, spec.file_mb, spec.min_ram_mb, mark))
+    if not pick:
+        print("  -> nothing fits comfortably; TARS uses cloud + the offline brain here.")
+    print("  set TARS_LOCAL_URL to a running llama.cpp server to use the 'local' brain.")
 
 
 def handle_command(cmd: str, tars: Tars, settings: Settings) -> bool:
@@ -53,11 +75,13 @@ def handle_command(cmd: str, tars: Tars, settings: Settings) -> bool:
         p.humor = _clamp(arg); print("[humor = {}%]".format(p.humor))
     elif name == "/honesty" and arg:
         p.honesty = _clamp(arg); print("[honesty = {}%]".format(p.honesty))
+    elif name == "/discretion" and arg:
+        p.discretion = _clamp(arg); print("[discretion = {}%]".format(p.discretion))
     elif name == "/sarcasm" and arg:
         p.sarcasm = _clamp(arg); print("[sarcasm = {}%]".format(p.sarcasm))
     elif name == "/settings":
-        print("[humor={}% honesty={}% sarcasm={}% | brain={}]".format(
-            p.humor, p.honesty, p.sarcasm, tars.brain.last_used or "auto"))
+        print("[humor={}% honesty={}% discretion={}% sarcasm={}% | brain={}]".format(
+            p.humor, p.honesty, p.discretion, p.sarcasm, tars.brain.last_used or "auto"))
     elif name == "/remember":
         kv = cmd.split(" ", 1)[1] if " " in cmd else ""
         key, _, value = kv.partition("=")
@@ -68,6 +92,8 @@ def handle_command(cmd: str, tars: Tars, settings: Settings) -> bool:
             print("usage: /remember key=value")
     elif name == "/facts":
         print(tars.memory.facts_text() or "[no facts yet]")
+    elif name == "/models":
+        print_models()
     else:
         print("unknown command; /help")
     return True
@@ -78,11 +104,12 @@ def main() -> None:
     tars = Tars(settings)
     print(BANNER)
 
-    if not tars.brain.available():
-        print("[!] No brain available yet. Add a FREE key (no credit card):")
-        print("    Gemini -> https://aistudio.google.com/apikey  (GEMINI_API_KEY)")
-        print("    Groq   -> https://console.groq.com/keys        (GROQ_API_KEY)")
-        print("    or run Ollama locally for full offline. See .env.example.\n")
+    smart = any(b.name != "offline" and b.available() for b in tars.brain.brains)
+    if not smart:
+        print("[!] Running on the OFFLINE brain only — TARS stays in character but")
+        print("    can't truly think yet. Start the on-device engine (llama.cpp")
+        print("    `llama-server`) or an Ollama server for the full mind.")
+        print("    See .env.example and /models for the catalog.\n")
 
     while True:
         try:

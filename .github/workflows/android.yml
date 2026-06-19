@@ -1,0 +1,146 @@
+name: Android APK
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build debug APK (Chaquopy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Chaquopy uses a host Python at build time (buildPython); match the
+      # target version (3.11) so bundled bytecode lines up.
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '7.6.4'
+
+      # Build the llama.cpp server for Android (arm64-v8a) and package it as a
+      # native lib, so TARS can run a local GGUF model fully on-device. It's
+      # shipped as lib*.so because Android only executes binaries from the
+      # (executable) native lib dir, not from app storage.
+      - name: Install NDK & CMake
+        run: yes | sdkmanager "ndk;26.1.10909125" "cmake;3.22.1" >/dev/null
+
+      - name: Build llama.cpp server (arm64-v8a)
+        run: |
+          set -e
+          # Use the newest llama.cpp release tag (b*). llama.cpp doesn't tag every
+          # build number (so a hand-picked "b5500" may not exist) — discover the
+          # latest real tag instead. Any current release has the Qwen3 architecture
+          # and the --jinja / -fa / KV-cache-quant server options TARS relies on
+          # (the old b5012 pin predated Qwen3).
+          LLAMA_TAG="$(git ls-remote --tags --refs --sort=-v:refname \
+            https://github.com/ggml-org/llama.cpp 'refs/tags/b*' \
+            | head -n1 | sed 's#.*refs/tags/##')"
+          echo "using llama.cpp tag: $LLAMA_TAG"
+          test -n "$LLAMA_TAG"
+          git clone --depth 1 --branch "$LLAMA_TAG" https://github.com/ggml-org/llama.cpp /tmp/llama.cpp
+          NDK="$ANDROID_SDK_ROOT/ndk/26.1.10909125"
+          # Target ARMv8.2-A with dot-product (sdot/udot) + FP16 arithmetic. The
+          # build aims at modern phones (e.g. Galaxy A32 / Helio G80, Cortex-A75)
+          # which all have these — it gives llama.cpp a ~3-5x speedup on the int8
+          # quantized models. NOTE: this makes the binary crash on pre-2017 arm64
+          # CPUs (ARMv8.0, no dotprod) — acceptable since we target arm64 + minSdk 26.
+          ARCH_FLAGS="-march=armv8.2-a+dotprod+fp16"
+          cmake -S /tmp/llama.cpp -B /tmp/llama-build \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-28 \
+            -DANDROID_STL=c++_static \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_FLAGS="$ARCH_FLAGS" \
+            -DCMAKE_CXX_FLAGS="$ARCH_FLAGS" \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DLLAMA_CURL=OFF \
+            -DGGML_OPENMP=OFF \
+            -DGGML_NATIVE=OFF \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_EXAMPLES=ON \
+            -DLLAMA_BUILD_SERVER=ON
+          # Build only the server target (-j2: modest memory, faster than -j1).
+          # The binary is named llama-server (older trees: server).
+          cmake --build /tmp/llama-build --target llama-server -j2 \
+            || cmake --build /tmp/llama-build --target server -j2
+          BIN="$(find /tmp/llama-build -type f \( -name llama-server -o -name server \) | head -n1)"
+          echo "built server: $BIN"
+          test -n "$BIN"
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          cp "$BIN" android/app/src/main/jniLibs/arm64-v8a/libllamaserver.so
+          # Belt and suspenders: if anything was still built as a shared lib
+          # (libllama.so / libggml*.so), bundle it too so the dynamic linker finds
+          # it next to the executable. With -DBUILD_SHARED_LIBS=OFF there are none.
+          find /tmp/llama-build -name 'lib*.so' -exec cp {} android/app/src/main/jniLibs/arm64-v8a/ \;
+          echo "bundled native files:"; ls -la android/app/src/main/jniLibs/arm64-v8a/
+          # Sanity check: if the executable still needs libllama.so, that lib must
+          # be bundled next to it; otherwise (static build) it's self-contained.
+          JNI=android/app/src/main/jniLibs/arm64-v8a
+          READELF="$NDK"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf
+          if "$READELF" -d "$JNI/libllamaserver.so" 2>/dev/null | grep -qi 'NEEDED.*libllama'; then
+            test -f "$JNI/libllama.so" || { echo "ERROR: needs libllama.so but it isn't bundled"; exit 1; }
+            echo "dynamically linked; companion libs bundled"
+          else
+            echo "statically linked; self-contained executable"
+          fi
+
+      - name: Fetch sherpa-onnx AAR (offline Piper TTS)
+        run: |
+          set -e
+          mkdir -p android/app/libs
+          curl -fsSL --retry 3 -o android/app/libs/sherpa-onnx.aar \
+            https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.0/sherpa-onnx-1.12.0.aar
+          ls -la android/app/libs
+
+      - name: Build debug APK
+        # versionCode = run number so every build is "newer"; the in-app updater
+        # compares against this.
+        run: |
+          gradle -p android assembleDebug --no-daemon --stacktrace \
+            -PversionCode=${{ github.run_number }} \
+            -PversionName=b${{ github.run_number }}
+
+      - name: Write version marker
+        run: echo "${{ github.run_number }}" > version.txt
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tars-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Publish APK to the rolling "latest" release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/import-tars-folder-m8wylg'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: TARS (latest build)
+          prerelease: true
+          files: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            version.txt

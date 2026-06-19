@@ -1,6 +1,5 @@
-# Milestone 1 needs only the Python standard library:
-#   - cloud brains (Gemini/Groq) are called via urllib
-#   - local brain via Ollama's HTTP API
+# The core needs only the Python standard library:
+#   - the on-device brain talks to llama.cpp/Ollama over HTTP via urllib
 #   - memory via sqlite3
 #
 # Later milestones add (kept here for reference):
