@@ -103,6 +103,7 @@ class MainActivity : AppCompatActivity() {
         setState("STANDBY")
 
         speaker = Speaker(this) { line -> log(line) }
+        VoiceSettings.load(this)
 
         stream.text = getString(R.string.greeting)
         brainBtn.setOnClickListener { setUpLocalBrain() }
@@ -260,18 +261,61 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(0, 1, 0, "Personality")
-        menu.add(0, 2, 1, "Diagnostics")
-        menu.add(0, 3, 2, getString(R.string.copy))
+        menu.add(0, 4, 1, "Voice")
+        menu.add(0, 2, 2, "Diagnostics")
+        menu.add(0, 3, 3, getString(R.string.copy))
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             1 -> { showDials(); return true }
+            4 -> { showVoiceBench(); return true }
             2 -> { showDiagnostics(); return true }
             3 -> { copyLog(); return true }
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    /** The voice bench: live Depth / Pace / Grit sliders that shape TARS's
+     *  delivery (the audio twin of the personality dials). Changes apply live and
+     *  persist; releasing a slider speaks a short test line so you hear it. */
+    private fun showVoiceBench() {
+        val names = listOf("Depth", "Pace", "Grit")
+        val cur = intArrayOf(VoiceSettings.depth, VoiceSettings.pace, VoiceSettings.grit)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 24, 48, 0)
+        }
+        fun commit(test: Boolean) {
+            VoiceSettings.depth = cur[0]; VoiceSettings.pace = cur[1]; VoiceSettings.grit = cur[2]
+            VoiceSettings.save(this)
+            speaker.applyTuning()
+            log("voice: depth=${cur[0]} pace=${cur[1]} grit=${cur[2]}")
+            if (test) speakReply("Голос настроен. Это TARS.")
+        }
+        for (i in 0 until 3) {
+            val label = TextView(this).apply { text = "${names[i]}: ${cur[i]}%"; textSize = 14f }
+            val bar = SeekBar(this).apply {
+                max = 100
+                progress = cur[i]
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(s: SeekBar?, value: Int, fromUser: Boolean) {
+                        cur[i] = value
+                        label.text = "${names[i]}: $value%"
+                    }
+                    override fun onStartTrackingTouch(s: SeekBar?) {}
+                    override fun onStopTrackingTouch(s: SeekBar?) { commit(true) }
+                })
+            }
+            root.addView(label)
+            root.addView(bar)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("TARS — voice")
+            .setView(ScrollView(this).apply { addView(root) })
+            .setPositiveButton("Done") { _, _ -> commit(false) }
+            .show()
     }
 
     /** Pull a fresh core status report into the stream (own thread so it shows

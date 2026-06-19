@@ -21,17 +21,25 @@ class Speaker(ctx: Context, private val log: (String) -> Unit) : TextToSpeech.On
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             ready = true
-            tts.setPitch(0.7f)        // deep, masculine
-            tts.setSpeechRate(0.95f)  // calm, deliberate
+            applyTuning()             // deep, deliberate — from the voice bench
             log("voice: ready (system TTS — a TARS-like Piper voice comes later)")
         } else {
             log("voice: system TTS unavailable (status $status)")
         }
     }
 
+    /** Apply the current voice-bench settings (Depth → pitch, Pace → rate).
+     *  Cheap; safe to call before each utterance so live tuning takes effect. */
+    fun applyTuning() {
+        if (!ready) return
+        tts.setPitch(VoiceSettings.ttsPitch())
+        tts.setSpeechRate(VoiceSettings.ttsRate())
+    }
+
     /** Speak in the same language the text is written in, preferring a male voice. */
     fun speak(text: String) {
         if (!ready || !enabled || text.isBlank()) return
+        applyTuning()
         val locale = if (cyrillic.containsMatchIn(text)) Locale("ru") else Locale.ENGLISH
         val res = tts.setLanguage(locale)
         if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {

@@ -113,7 +113,7 @@ object PiperVoice {
         val engine = engines[lang] ?: return false
         try {
             stop()
-            val audio = engine.generate(text = text, sid = 0, speed = 0.95f)
+            val audio = engine.generate(text = text, sid = 0, speed = VoiceSettings.piperSpeed())
             val samples = CommsFilter.apply(audio.samples, audio.sampleRate)
             if (samples.isEmpty()) return true
             val sr = audio.sampleRate
