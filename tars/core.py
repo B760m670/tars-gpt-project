@@ -18,6 +18,10 @@ class Tars:
         history = self.memory.recent_turns(self.settings.history_turns)
         messages = history + [{"role": "user", "content": user_text}]
         reply = self.brain.reply(system, messages)
-        self.memory.add_turn("user", user_text)
-        self.memory.add_turn("assistant", reply)
+        # Only persist turns that came from a real model. Offline-brain responses
+        # are scripted canned text — storing them poisons the real model's context
+        # on the next call (it mimics whatever "TARS" said before).
+        if self.brain.last_used != "offline":
+            self.memory.add_turn("user", user_text)
+            self.memory.add_turn("assistant", reply)
         return reply

@@ -153,6 +153,16 @@ def system_prompt() -> str:
     return build_system_prompt(_tars.settings.personality, _tars.memory.facts_text())
 
 
+def clear_memory() -> str:
+    """Wipe conversation history (keeps learned facts). Call when the model was
+    previously producing offline-brain-style replies — old canned responses poison
+    the real model's context until the history is reset."""
+    if _tars is None:
+        return "core not started"
+    n = _tars.memory.clear_turns()
+    return "memory cleared ({} turns deleted)".format(n)
+
+
 def diagnostics() -> str:
     """A short status report for the in-app Logs view."""
     from . import models

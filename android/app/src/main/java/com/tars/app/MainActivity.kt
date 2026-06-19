@@ -450,7 +450,8 @@ class MainActivity : AppCompatActivity() {
         menu.add(0, 4, 1, "Voice")
         menu.add(0, 5, 2, "Flip camera")
         menu.add(0, 2, 3, "Diagnostics")
-        menu.add(0, 3, 4, getString(R.string.copy))
+        menu.add(0, 6, 4, "Wipe memory")
+        menu.add(0, 3, 5, getString(R.string.copy))
         return true
     }
 
@@ -460,9 +461,28 @@ class MainActivity : AppCompatActivity() {
             4 -> { showVoiceBench(); return true }
             5 -> { Vision.switchLens(this) { l -> log(l) }; return true }
             2 -> { showDiagnostics(); return true }
+            6 -> { confirmWipeMemory(); return true }
             3 -> { copyLog(); return true }
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    /** Confirm and clear conversation history (not facts). Needed after the model
+     *  produces offline-brain-style replies due to poisoned history. */
+    private fun confirmWipeMemory() {
+        AlertDialog.Builder(this)
+            .setTitle("Wipe conversation memory?")
+            .setMessage("This deletes the conversation history so TARS forgets recent exchanges. Learned facts are kept. Use this if TARS is mimicking old offline replies.")
+            .setPositiveButton("Wipe") { _, _ ->
+                worker.execute {
+                    val msg = try {
+                        bridge.callAttr("clear_memory").toString()
+                    } catch (e: Exception) { "error: ${e.message}" }
+                    log("memory: $msg")
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     /** The voice bench: live Depth / Pace / Grit sliders that shape TARS's

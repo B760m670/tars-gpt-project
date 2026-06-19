@@ -145,8 +145,9 @@ object LlamaServer {
 
         // Watch startup and report the outcome — otherwise a crash is invisible
         // and TARS silently stays on the offline brain.
+        // 300s budget: a 2.5 GB Qwen3-4B takes ~60-120s to map into RAM on A32.
         Thread {
-            for (i in 1..90) {
+            for (i in 1..300) {
                 Thread.sleep(1000)
                 if (!proc.isAlive) {
                     val code = try { proc.exitValue() } catch (e: Exception) { -1 }
@@ -157,8 +158,10 @@ object LlamaServer {
                     log("brain: local engine READY — TARS now thinks on-device. Say something.")
                     return@Thread
                 }
+                // Progress heartbeat every 30s so the user knows it's still loading.
+                if (i % 30 == 0) log("brain: loading model… ${i}s (a 2.5 GB brain takes a minute)")
             }
-            log("brain: engine didn't become ready in 90s. Server log:\n${tailLog(ctx)}")
+            log("brain: engine didn't become ready in 300s. Server log:\n${tailLog(ctx)}")
         }.start()
     }
 

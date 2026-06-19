@@ -60,5 +60,12 @@ class Memory:
                 "SELECT key, value FROM facts ORDER BY key"
             ).fetchall()
 
+    def clear_turns(self) -> int:
+        """Delete all conversation history (keeps facts). Returns rows deleted."""
+        with self._lock:
+            cur = self.db.execute("DELETE FROM turns")
+            self.db.commit()
+            return cur.rowcount
+
     def facts_text(self) -> str:
         return "\n".join(f"- {k}: {v}" for k, v in self.facts())
