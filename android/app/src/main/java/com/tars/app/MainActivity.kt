@@ -197,6 +197,11 @@ class MainActivity : AppCompatActivity() {
             }
             val report = try { bridge.callAttr("last_brain_report").toString() } catch (e: Exception) { "?" }
             log("chat: $report")
+            // Be honest when the scripted backup answered only because the real
+            // engine is still loading — so a slow startup never looks like failure.
+            if (report.contains("used=offline") && LlamaServer.isRunning()) {
+                log("brain: that was the backup voice — the on-device engine is still warming up. Give it a few seconds, then ask again.")
+            }
             runOnUiThread {
                 appendLine("TARS> $reply")
                 if (!reply.startsWith("[error]")) speakReply(reply)
@@ -450,8 +455,9 @@ class MainActivity : AppCompatActivity() {
         menu.add(0, 4, 1, "Voice")
         menu.add(0, 5, 2, "Flip camera")
         menu.add(0, 2, 3, "Diagnostics")
-        menu.add(0, 6, 4, "Wipe memory")
-        menu.add(0, 3, 5, getString(R.string.copy))
+        menu.add(0, 7, 4, "Engine log")
+        menu.add(0, 6, 5, "Wipe memory")
+        menu.add(0, 3, 6, getString(R.string.copy))
         return true
     }
 
@@ -461,10 +467,21 @@ class MainActivity : AppCompatActivity() {
             4 -> { showVoiceBench(); return true }
             5 -> { Vision.switchLens(this) { l -> log(l) }; return true }
             2 -> { showDiagnostics(); return true }
+            7 -> { showEngineLog(); return true }
             6 -> { confirmWipeMemory(); return true }
             3 -> { copyLog(); return true }
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    /** Dump the raw llama-server log into the stream — the ground truth for why
+     *  the engine is stuck or crashing. It scrolls into the copyable transcript. */
+    private fun showEngineLog() {
+        Thread {
+            val body = LlamaServer.fullLog(this)
+            appendLine("\n--- llama-server.log ---\n$body\n------------------------")
+            log("engine log: dumped (use Copy log to share it)")
+        }.start()
     }
 
     /** Confirm and clear conversation history (not facts). Needed after the model

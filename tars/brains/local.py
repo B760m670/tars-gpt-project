@@ -31,11 +31,22 @@ class LocalBrain(Brain):
         self.model = model or "local"
 
     def available(self) -> bool:
-        """True only when the embedded llama.cpp server is up with a model
-        loaded. llama-server reports readiness on /health."""
+        """True once the embedded llama.cpp server is up with a model loaded.
+
+        /health is the canonical signal (200 {"status":"ok"} when ready, 503 while
+        loading). But builds differ, and a wrongly-failed check here is exactly what
+        sent every message to the offline brain — so we ALSO accept a live
+        /v1/models, which only answers 200 once the model is loaded. Either one
+        means the engine can think."""
         try:
-            data = get_json("{}/health".format(self.url), timeout=2)
-            return str(data.get("status", "")).lower() in ("ok", "ready", "")
+            data = get_json("{}/health".format(self.url), timeout=3)
+            if str(data.get("status", "")).lower() in ("ok", "ready", ""):
+                return True
+        except Exception:
+            pass
+        try:
+            get_json("{}/v1/models".format(self.url), timeout=3)
+            return True
         except Exception:
             return False
 

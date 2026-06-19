@@ -47,9 +47,15 @@ class ModelManagerTests(unittest.TestCase):
         self.assertIsNotNone(pick)
         self.assertIn(pick.id, {"qwen3-0.6b", "qwen3-1.7b"})
 
-    def test_galaxy_a32_6gb_gets_the_4b(self):
-        # The target device: ~6 GB RAM (reports ~5500 MB) lands on Qwen3-4B.
-        self.assertEqual(models.recommend(5500).id, "qwen3-4b")
+    def test_galaxy_a32_6gb_gets_the_fast_17b(self):
+        # The target device: ~6 GB RAM (reports ~5500 MB). It lands on Qwen3-1.7B,
+        # which reliably loads and answers fast — the 4B was too heavy/slow here and
+        # left the brain "unavailable" while it spent a minute+ loading.
+        self.assertEqual(models.recommend(5500).id, "qwen3-1.7b")
+
+    def test_8gb_phone_gets_the_4b(self):
+        # A true 8 GB phone has the headroom for the heavier 4B.
+        self.assertEqual(models.recommend(8000).id, "qwen3-4b")
 
     def test_flagship_gets_the_heaviest(self):
         self.assertEqual(models.recommend(16000).id, "qwen3-8b")

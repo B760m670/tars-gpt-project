@@ -121,13 +121,15 @@ object LlamaServer {
         // Kept deliberately minimal so the server reliably STARTS. (An earlier
         // bare "-fa" crashed newer llama.cpp, which now requires "-fa on"; flash
         // attention + KV-cache quant are optimizations we can re-add once the core
-        // is verified on-device.)
+        // is verified on-device.) A 2048 context keeps the KV cache small enough to
+        // fit comfortably on a 6 GB phone — a too-large cache is part of why the
+        // engine spent a minute+ "loading" and sometimes never became ready.
         val args = arrayListOf(
             bin.absolutePath,
             "-m", model.absolutePath,
             "--host", "127.0.0.1",
             "--port", "8080",
-            "-c", "4096",
+            "-c", "2048",
             "-t", threads.toString(),
             // Use the model's own chat template (e.g. Qwen3's /no_think switch).
             "--jinja"
@@ -155,14 +157,63 @@ object LlamaServer {
                     return@Thread
                 }
                 if (health()) {
-                    log("brain: local engine READY — TARS now thinks on-device. Say something.")
+                    log("brain: local engine READY — running a quick self-test so you can see it's alive…")
+                    // PROOF, end-to-end: actually ask the model for one line and log
+                    // what it says. If this shows real TARS words, the brain works.
+                    // If it shows an error, that error is the real bug — not a guess.
+                    val proof = selfTest()
+                    log("brain: self-test — TARS says: \"$proof\"")
+                    log("brain: TARS now thinks on-device. Talk to him.")
                     return@Thread
                 }
-                // Progress heartbeat every 30s so the user knows it's still loading.
-                if (i % 30 == 0) log("brain: loading model… ${i}s (a 2.5 GB brain takes a minute)")
+                // Progress heartbeat every 20s so the user knows it's still loading.
+                if (i % 20 == 0) log("brain: loading model… ${i}s")
             }
             log("brain: engine didn't become ready in 300s. Server log:\n${tailLog(ctx)}")
         }.start()
+    }
+
+    /** End-to-end proof the engine can think: send one tiny chat completion and
+     *  return what the model actually said (or the real error). This is the line
+     *  that finally distinguishes "loaded but mute" from "genuinely working". */
+    private fun selfTest(): String {
+        return try {
+            val body = "{\"messages\":[{\"role\":\"user\"," +
+                "\"content\":\"/no_think Ответь одним коротким предложением в характере TARS: ты в сети?\"}]," +
+                "\"temperature\":0.7,\"max_tokens\":48}"
+            val c = URL("http://127.0.0.1:8080/v1/chat/completions").openConnection() as HttpURLConnection
+            c.requestMethod = "POST"
+            c.doOutput = true
+            c.connectTimeout = 5000
+            c.readTimeout = 120000
+            c.setRequestProperty("Content-Type", "application/json")
+            c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            val resp = if (c.responseCode in 200..299)
+                c.inputStream.bufferedReader().readText()
+            else
+                "HTTP ${c.responseCode}: " + (c.errorStream?.bufferedReader()?.readText() ?: "")
+            c.disconnect()
+            val m = Regex("\"content\"\\s*:\\s*\"(.*?)\"", RegexOption.DOT_MATCHES_ALL).find(resp)
+            m?.groupValues?.get(1)
+                ?.replace("\\n", " ")?.replace("\\\"", "\"")?.replace("\\u003c", "<")?.replace("\\u003e", ">")
+                ?.trim()
+                ?.ifBlank { "(empty reply)" }
+                ?: "(no content in response: ${resp.take(160)})"
+        } catch (e: Exception) {
+            "self-test failed: ${e.message}"
+        }
+    }
+
+    /** The entire llama-server log — the ground truth for diagnosing a stuck or
+     *  crashing engine. Surfaced via the menu so it can be copied and shared. */
+    fun fullLog(ctx: Context): String {
+        val f = logFile(ctx)
+        if (!f.exists()) return "(no server log yet — start the brain first)"
+        return try {
+            f.readText().ifBlank { "(server log empty)" }
+        } catch (e: Exception) {
+            "(can't read server log: ${e.message})"
+        }
     }
 
     /** True once llama-server answers /health with status ok (200). */

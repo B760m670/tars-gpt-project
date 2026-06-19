@@ -71,14 +71,16 @@ CATALOG: List[ModelSpec] = [
         file_mb=1100, min_ram_mb=2400,
         repo="Qwen/Qwen3-1.7B-GGUF",
         filename="Qwen3-1.7B-Q4_K_M.gguf",
-        note="A good fit for a normal mid-range phone.",
+        note="The reliable pick for a 6 GB phone (Galaxy A32-class): loads in "
+             "~15s and answers in seconds — fast enough to actually feel alive.",
     ),
     ModelSpec(
         id="qwen3-4b", label="Standard", params="4B",
-        file_mb=2500, min_ram_mb=3700,
+        file_mb=2500, min_ram_mb=4400,
         repo="Qwen/Qwen3-4B-GGUF",
         filename="Qwen3-4B-Q4_K_M.gguf",
-        note="The sweet spot for a 6 GB phone (Galaxy A32-class) — TARS's voice mind.",
+        note="Richer character, but heavy: ~1-2 min to load and slow to speak on a "
+             "6 GB phone. Recommended only for 8 GB+ devices.",
     ),
     ModelSpec(
         id="qwen3-8b", label="Heavy", params="8B",
