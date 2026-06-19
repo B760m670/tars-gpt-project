@@ -163,7 +163,7 @@ class MainActivity : AppCompatActivity() {
         brainExec.execute {
             try {
                 if (!LlamaServer.isSupported(this)) {
-                    log("brain: no on-device engine for this CPU (need arm64). Use a key or offline.")
+                    log("brain: on-device local model isn't in this build — add a free cloud Key for a smart, fast TARS.")
                     return@execute
                 }
                 val info = bridge.callAttr("recommended_model").toString()

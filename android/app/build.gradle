@@ -63,6 +63,27 @@ android {
         }
     }
 
+    // Two builds from one core:
+    //   lite — Android 5+, cloud + offline brain, system TTS. No heavy native
+    //          libs (no llama.cpp, no onnxruntime). Small and bulletproof.
+    //   full — Android 8+, adds the on-device llama.cpp brain and Piper voices.
+    // Heavy code lives in src/full; src/lite has light stubs of the same API.
+    flavorDimensions 'tier'
+    productFlavors {
+        lite {
+            dimension 'tier'
+            minSdk 21
+            applicationIdSuffix '.lite'
+            versionNameSuffix '-lite'
+        }
+        full {
+            dimension 'tier'
+            minSdk 26
+            applicationIdSuffix '.full'
+            versionNameSuffix '-full'
+        }
+    }
+
     packagingOptions {
         // The llama.cpp server ships as an executable disguised as a .so; keep
         // it uncompressed/extracted so it can be run, and don't strip it.
@@ -75,11 +96,9 @@ android {
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
-    // Official sherpa-onnx AAR (offline TTS engine that runs Piper voices). It
-    // bundles the com.k2fsa.sherpa.onnx API + native libs (onnxruntime included)
-    // and targets minSdk 21. CI downloads it into app/libs (see the workflow);
-    // resolved via the flatDir repo declared in settings.gradle.
-    implementation(name: 'sherpa-onnx', ext: 'aar')
+    // Official sherpa-onnx AAR (offline Piper TTS) — FULL flavor only. CI
+    // downloads it into app/libs; resolved via the flatDir repo in settings.gradle.
+    fullImplementation(name: 'sherpa-onnx', ext: 'aar')
 }
 
 // Make the repo-root `tars` package available to Chaquopy via the default

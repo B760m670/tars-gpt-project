@@ -14,7 +14,7 @@ android/.gradle/
 android/build/
 android/app/build/
 android/app/src/main/python/
-android/app/src/main/jniLibs/
+android/app/src/full/jniLibs/
 android/app/libs/
 android/local.properties
 *.apk

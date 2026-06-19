@@ -20,8 +20,9 @@ import java.net.URL
 object Updater {
     private const val BASE =
         "https://github.com/B760m670/tars-gpt-project/releases/download/latest"
-    private const val VERSION_URL = "$BASE/version.txt"
-    private const val APK_URL = "$BASE/app-debug.apk"
+    // Per-flavor so Lite updates to Lite and Full to Full.
+    private val VERSION_URL = "$BASE/version-${BuildConfig.FLAVOR}.txt"
+    private val APK_URL = "$BASE/app-${BuildConfig.FLAVOR}-debug.apk"
 
     fun checkAndPrompt(activity: Activity, log: (String) -> Unit) {
         try {

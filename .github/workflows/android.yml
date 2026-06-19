@@ -74,16 +74,16 @@ jobs:
           BIN="$(find /tmp/llama-build -type f \( -name llama-server -o -name server \) | head -n1)"
           echo "built server: $BIN"
           test -n "$BIN"
-          mkdir -p android/app/src/main/jniLibs/arm64-v8a
-          cp "$BIN" android/app/src/main/jniLibs/arm64-v8a/libllamaserver.so
+          mkdir -p android/app/src/full/jniLibs/arm64-v8a
+          cp "$BIN" android/app/src/full/jniLibs/arm64-v8a/libllamaserver.so
           # Belt and suspenders: if anything was still built as a shared lib
           # (libllama.so / libggml*.so), bundle it too so the dynamic linker finds
           # it next to the executable. With -DBUILD_SHARED_LIBS=OFF there are none.
-          find /tmp/llama-build -name 'lib*.so' -exec cp {} android/app/src/main/jniLibs/arm64-v8a/ \;
-          echo "bundled native files:"; ls -la android/app/src/main/jniLibs/arm64-v8a/
+          find /tmp/llama-build -name 'lib*.so' -exec cp {} android/app/src/full/jniLibs/arm64-v8a/ \;
+          echo "bundled native files:"; ls -la android/app/src/full/jniLibs/arm64-v8a/
           # Sanity check: if the executable still needs libllama.so, that lib must
           # be bundled next to it; otherwise (static build) it's self-contained.
-          JNI=android/app/src/main/jniLibs/arm64-v8a
+          JNI=android/app/src/full/jniLibs/arm64-v8a
           READELF="$NDK"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf
           if "$READELF" -d "$JNI/libllamaserver.so" 2>/dev/null | grep -qi 'NEEDED.*libllama'; then
             test -f "$JNI/libllama.so" || { echo "ERROR: needs libllama.so but it isn't bundled"; exit 1; }
@@ -100,28 +100,33 @@ jobs:
             https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.0/sherpa-onnx-1.12.0.aar
           ls -la android/app/libs
 
-      - name: Build debug APK
+      - name: Build both APKs (Lite + Full)
         # versionCode = run number so every build is "newer"; the in-app updater
         # compares against this.
         run: |
-          gradle -p android assembleDebug --no-daemon --stacktrace \
+          gradle -p android assembleLiteDebug assembleFullDebug --no-daemon --stacktrace \
             -PversionCode=${{ github.run_number }} \
             -PversionName=b${{ github.run_number }}
+          ls -la android/app/build/outputs/apk/lite/debug android/app/build/outputs/apk/full/debug
 
-      - name: Write version marker
-        run: echo "${{ github.run_number }}" > version.txt
+      - name: Write version markers
+        run: |
+          echo "${{ github.run_number }}" > version-lite.txt
+          echo "${{ github.run_number }}" > version-full.txt
 
-      - name: Upload APK artifact
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: tars-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: tars-apks
+          path: |
+            android/app/build/outputs/apk/lite/debug/app-lite-debug.apk
+            android/app/build/outputs/apk/full/debug/app-full-debug.apk
           if-no-files-found: error
 
-      # Publish a rolling pre-release so the APK + version marker are one click to
-      # download AND so the in-app self-updater can find the latest build. Runs on
-      # main and on the active dev branch (so updates work while testing it).
-      - name: Publish APK to the rolling "latest" release
+      # Publish a rolling pre-release with BOTH APKs + per-flavor version markers,
+      # so the user picks Lite (Android 5+) or Full (Android 8+) and the in-app
+      # updater finds the latest build for its own flavor.
+      - name: Publish APKs to the rolling "latest" release
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/import-tars-folder-m8wylg'
         uses: softprops/action-gh-release@v2
         with:
@@ -129,5 +134,7 @@ jobs:
           name: TARS (latest build)
           prerelease: true
           files: |
-            android/app/build/outputs/apk/debug/app-debug.apk
-            version.txt
+            android/app/build/outputs/apk/lite/debug/app-lite-debug.apk
+            android/app/build/outputs/apk/full/debug/app-full-debug.apk
+            version-lite.txt
+            version-full.txt
