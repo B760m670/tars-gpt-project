@@ -18,7 +18,7 @@ import android.content.Context
  */
 object VoiceSettings {
     @Volatile var depth = 60   // 0..100
-    @Volatile var pace = 45    // 0..100  (≈0.95x speed — deliberate)
+    @Volatile var pace = 30    // 0..100 — deliberate; TARS doesn't gabble
     @Volatile var grit = 75    // 0..100
 
     fun load(ctx: Context) {
@@ -37,11 +37,12 @@ object VoiceSettings {
 
     // --- derived synthesis parameters ---
 
-    /** Piper synthesis speed (smaller = slower). pace 0..100 → 1.25..0.70. */
-    fun piperSpeed(): Float = 1.25f - (pace / 100f) * 0.55f
+    /** Piper synthesis speed (larger = faster). pace 0..100 → 0.75..1.25, so a
+     *  low Pace is slow and deliberate. Default pace 30 → ~0.90x. */
+    fun piperSpeed(): Float = 0.75f + (pace / 100f) * 0.50f
 
-    /** System-TTS speech rate (here larger = faster). → 0.70..1.50. */
-    fun ttsRate(): Float = 0.70f + (pace / 100f) * 0.80f
+    /** System-TTS speech rate (larger = faster). → 0.70..1.30. Default → ~0.88x. */
+    fun ttsRate(): Float = 0.70f + (pace / 100f) * 0.60f
 
     /** System-TTS pitch: more depth → lower pitch. depth 0..100 → 1.05..0.55. */
     fun ttsPitch(): Float = 1.05f - (depth / 100f) * 0.50f

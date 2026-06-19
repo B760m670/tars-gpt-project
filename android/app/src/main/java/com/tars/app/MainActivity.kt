@@ -121,11 +121,11 @@ class MainActivity : AppCompatActivity() {
         voiceBtn.setOnLongClickListener { installPiperVoice(); true }
         micBtn.setOnClickListener { toggleEars() }
         micBtn.setOnLongClickListener { installEars(); true }
-        eyeBtn.setOnClickListener { toggleVision() }
-        eyeBtn.setOnLongClickListener { Vision.switchLens(this) { l -> log(l) }; true }
+        eyeBtn.setOnClickListener { lookNow(DEFAULT_LOOK) }
+        eyeBtn.setOnLongClickListener { cameraOff(); true }
         log("voice: long-press Voice to install the deep TARS voices, RU + EN (~60 MB)")
         log("ears: long-press Mic to install speech recognition, then say \"Hey TARS\"")
-        log("vision: tap Eye to let TARS see; long-press Eye to flip camera")
+        log("vision: tap Eye and TARS takes one look; long-press Eye turns the camera off")
         log("console: type to talk, or '\$ cmd' for shell, 'py code' for Python")
 
         worker.execute {
@@ -240,9 +240,9 @@ class MainActivity : AppCompatActivity() {
             }
             return
         }
-        // If he's watching and you ask about what he sees, answer from the camera.
-        if (Vision.isOn() && visionQuestion.containsMatchIn(command)) {
-            doGlance(command)
+        // If you ask about what he sees, open the camera for a single look.
+        if (visionQuestion.containsMatchIn(command)) {
+            runOnUiThread { lookNow(command) }
             return
         }
         converse(command)
@@ -296,56 +296,42 @@ class MainActivity : AppCompatActivity() {
                 if (Ears.isReady()) Ears.start(this, { heard -> onHeard(heard) }) { line -> log(line) }
                 else installEars()
             } else log("ears: mic permission denied — voice input off")
-            REQ_CAM -> if (granted) { log("vision: camera permission granted"); startVision() }
+            REQ_CAM -> if (granted) { log("vision: camera permission granted"); lookNow(DEFAULT_LOOK) }
             else log("vision: camera permission denied — TARS can't see")
         }
     }
 
-    // ---- Vision: TARS sees through the camera and comments on what he sees ----
-
-    @Volatile private var visionOn = false
-    private val glanceEvery = 30_000L   // a "glance" at most this often
+    // ---- Vision: TARS looks ON DEMAND (a tap, or a spoken request) — never a
+    // constant stare. The camera is opened only for a look. ----
 
     private fun hasCamPermission(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
 
-    private fun toggleVision() {
-        if (Vision.isOn()) {
-            visionOn = false
-            ui.removeCallbacks(glanceTick)
-            Vision.stop(this) { l -> log(l) }
-            return
-        }
+    /** Eye tap: take one look right now and comment. Opens the camera if needed. */
+    private fun lookNow(ask: String) {
         if (!hasCamPermission()) { requestPermissions(arrayOf(Manifest.permission.CAMERA), REQ_CAM); return }
         if (!LlamaServer.isRunning()) {
             log("vision: start the brain first (tap Brain) — the eyes need the vision model")
             return
         }
-        startVision()
-    }
-
-    private fun startVision() {
-        Vision.start(this) { l -> log(l) }
-        visionOn = true
-        ui.removeCallbacks(glanceTick)
-        ui.postDelayed(glanceTick, 4000)   // first look shortly after the camera warms up
-    }
-
-    /** Periodic unprompted "glance": TARS looks and comments only if he feels like
-     *  it (the model answers "…" when nothing's worth a remark). */
-    private val glanceTick = object : Runnable {
-        override fun run() {
-            if (!visionOn) return
-            doGlance("Коротко прокомментируй, что видишь, в характере TARS. " +
-                "Если ничего интересного — ответь только «…».")
-            ui.postDelayed(this, glanceEvery)
+        if (!Vision.isOn()) {
+            Vision.start(this) { l -> log(l) }
+            ui.postDelayed({ doGlance(ask) }, 1500)   // let the camera warm up
+        } else {
+            doGlance(ask)
         }
     }
 
-    /** Ask the vision model about the current frame; speak the comment if any. */
+    /** Turn the camera fully off (release it). */
+    private fun cameraOff() {
+        if (Vision.isOn()) Vision.stop(this) { l -> log(l) }
+    }
+
+    /** Capture one frame, ask the vision model, speak the comment if any. */
     private fun doGlance(ask: String) {
         if (!Vision.isOn()) return
+        log("vision: looking…")
         voiceExec.execute {
             val sys = try { bridge.callAttr("system_prompt").toString() } catch (e: Exception) { "You are TARS." }
             val comment = Vision.glance(sys, ask) { l -> log(l) }
@@ -454,8 +440,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(0, 1, 0, "Personality")
         menu.add(0, 4, 1, "Voice")
-        menu.add(0, 2, 2, "Diagnostics")
-        menu.add(0, 3, 3, getString(R.string.copy))
+        menu.add(0, 5, 2, "Flip camera")
+        menu.add(0, 2, 3, "Diagnostics")
+        menu.add(0, 3, 4, getString(R.string.copy))
         return true
     }
 
@@ -463,6 +450,7 @@ class MainActivity : AppCompatActivity() {
         when (item.itemId) {
             1 -> { showDials(); return true }
             4 -> { showVoiceBench(); return true }
+            5 -> { Vision.switchLens(this) { l -> log(l) }; return true }
             2 -> { showDiagnostics(); return true }
             3 -> { copyLog(); return true }
         }
@@ -641,5 +629,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val REQ_MIC = 101
         private const val REQ_CAM = 102
+        private const val DEFAULT_LOOK =
+            "Посмотри в камеру и коротко, в характере TARS, скажи, что видишь."
     }
 }
