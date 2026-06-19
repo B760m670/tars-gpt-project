@@ -20,6 +20,14 @@ Run it (needs HuggingFace reachable — add it to the session's network allowlis
 Or talk to him live:
 
     python tools/brain_demo.py --chat
+
+No HuggingFace and no llama.cpp (e.g. a locked-down session with the Hub off the
+network allowlist)? The real model can't load there. Pass --offline (or just let
+it fall back automatically) to run the SAME conversation through TARS's scripted
+offline fallback instead — degraded, plainly labelled, but enough to see his
+bilingual character (the Russian greeting included):
+
+    python tools/brain_demo.py --offline
 """
 from __future__ import annotations
 
@@ -31,6 +39,7 @@ from pathlib import Path
 # Make the repo-root `tars` package importable when run as tools/brain_demo.py.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from tars.brains.offline import OfflineBrain
 from tars.config import Personality
 from tars.personality import build_system_prompt
 
@@ -51,14 +60,25 @@ _DEMO_TURNS = [
 
 
 def _load_model():
-    """Download (cached) and load Qwen3-1.7B via llama-cpp-python."""
+    """Download (cached) and load Qwen3-1.7B via llama-cpp-python.
+
+    Returns the loaded model, or None if the real brain can't run here (deps
+    missing or the Hub unreachable) so the caller can fall back to the offline
+    character instead of crashing.
+    """
     try:
         from huggingface_hub import hf_hub_download
         from llama_cpp import Llama
     except ImportError:
-        sys.exit("Install deps first:  pip install llama-cpp-python huggingface_hub")
-    print(f"… fetching {MODEL_REPO}/{MODEL_FILE} (cached after first run)")
-    path = hf_hub_download(repo_id=MODEL_REPO, filename=MODEL_FILE)
+        print("… llama-cpp-python / huggingface_hub not installed "
+              "(pip install llama-cpp-python huggingface_hub)")
+        return None
+    try:
+        print(f"… fetching {MODEL_REPO}/{MODEL_FILE} (cached after first run)")
+        path = hf_hub_download(repo_id=MODEL_REPO, filename=MODEL_FILE)
+    except Exception as e:  # network/Hub off the allowlist, auth, disk, …
+        print(f"… couldn't fetch the model from HuggingFace: {e}")
+        return None
     print("… loading the model into llama.cpp")
     # chat_format="qwen" makes llama-cpp-python apply Qwen's ChatML template, which
     # is what honours the /no_think switch — mirroring the phone's --jinja server.
@@ -71,29 +91,44 @@ def _load_model():
     )
 
 
-def _reply(llm, system: str, history: list, user_text: str) -> str:
-    """One turn, exactly as LocalBrain does it on the phone."""
-    messages = [{"role": "system", "content": system}]
-    messages.extend(history)
-    messages.append({"role": "user", "content": "/no_think " + user_text})
-    out = llm.create_chat_completion(
-        messages=messages, temperature=0.7, top_p=0.8, max_tokens=220
-    )
-    text = out["choices"][0]["message"]["content"]
-    return _THINK.sub("", text).strip()
+def _model_responder(llm):
+    """A responder closure over the real model: history + text -> reply, exactly
+    as LocalBrain does it on the phone."""
+    def respond(system: str, history: list, user_text: str) -> str:
+        messages = [{"role": "system", "content": system}]
+        messages.extend(history)
+        messages.append({"role": "user", "content": "/no_think " + user_text})
+        out = llm.create_chat_completion(
+            messages=messages, temperature=0.7, top_p=0.8, max_tokens=220
+        )
+        text = out["choices"][0]["message"]["content"]
+        return _THINK.sub("", text).strip()
+    return respond
 
 
-def run_demo(llm, system: str) -> None:
+def _offline_responder():
+    """A responder backed by the scripted offline fallback — no model, no network.
+    Honest stand-in so the demo still runs (and still shows the bilingual
+    character) where the real brain can't load."""
+    brain = OfflineBrain()
+
+    def respond(system: str, history: list, user_text: str) -> str:
+        messages = list(history) + [{"role": "user", "content": user_text}]
+        return brain.reply(system, messages)
+    return respond
+
+
+def run_demo(respond, system: str) -> None:
     history: list = []
     for user_text in _DEMO_TURNS:
-        reply = _reply(llm, system, history, user_text)
+        reply = respond(system, history, user_text)
         print(f"\n\033[36mYOU >\033[0m {user_text}")
         print(f"\033[33mTARS>\033[0m {reply}")
         history.append({"role": "user", "content": user_text})
         history.append({"role": "assistant", "content": reply})
 
 
-def run_chat(llm, system: str) -> None:
+def run_chat(respond, system: str) -> None:
     history: list = []
     print("Talk to TARS (Ctrl-C to quit).")
     while True:
@@ -104,7 +139,7 @@ def run_chat(llm, system: str) -> None:
             return
         if not user_text:
             continue
-        reply = _reply(llm, system, history, user_text)
+        reply = respond(system, history, user_text)
         print(f"\033[33mTARS>\033[0m {reply}")
         history.append({"role": "user", "content": user_text})
         history.append({"role": "assistant", "content": reply})
@@ -114,15 +149,29 @@ def run_chat(llm, system: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Run the real TARS brain locally.")
     ap.add_argument("--chat", action="store_true", help="interactive conversation")
+    ap.add_argument("--offline", action="store_true",
+                    help="skip the real model; run via the scripted offline fallback")
     args = ap.parse_args()
 
     system = build_system_prompt(Personality())
-    llm = _load_model()
-    print("\n=== TARS brain — real model, real character, no scripts ===")
-    if args.chat:
-        run_chat(llm, system)
+
+    llm = None if args.offline else _load_model()
+    if llm is not None:
+        respond = _model_responder(llm)
+        print("\n=== TARS brain — real model, real character, no scripts ===")
     else:
-        run_demo(llm, system)
+        respond = _offline_responder()
+        if not args.offline:
+            print("\n[!] Real brain unavailable here — falling back to the OFFLINE")
+            print("    character. This is scripted, NOT the real model. Add HuggingFace")
+            print("    to the network allowlist (and pip install the deps) for the")
+            print("    genuine conversation.")
+        print("\n=== TARS — OFFLINE fallback character (scripted, degraded) ===")
+
+    if args.chat:
+        run_chat(respond, system)
+    else:
+        run_demo(respond, system)
 
 
 if __name__ == "__main__":
