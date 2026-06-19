@@ -27,6 +27,14 @@
             android:layout_weight="1"
             android:minWidth="0dp"
             android:text="@string/voice" />
+
+        <Button
+            android:id="@+id/mic"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minWidth="0dp"
+            android:text="@string/mic" />
     </LinearLayout>
 
     <LinearLayout

@@ -59,6 +59,22 @@ def extract_voice(archive: str, dest: str) -> str:
     return "|".join([onnx, tokens, data_dir])
 
 
+def extract_archive(archive: str, dest: str) -> str:
+    """Unpack a sherpa-onnx model .tar.bz2 (Python has bz2 + tar built in,
+    Android/Java doesn't) into dest and return the directory that actually holds
+    the files (the single top-level folder inside the archive, if there is one).
+    The Kotlin side then locates the specific .onnx/tokens by name."""
+    import tarfile
+
+    os.makedirs(dest, exist_ok=True)
+    with tarfile.open(archive, "r:bz2") as tar:
+        tar.extractall(dest)
+    entries = [e for e in os.listdir(dest) if not e.startswith(".")]
+    if len(entries) == 1 and os.path.isdir(os.path.join(dest, entries[0])):
+        return os.path.join(dest, entries[0])
+    return dest
+
+
 def get_personality() -> str:
     """Current dials as 'humor|honesty|discretion|sarcasm' for the settings UI."""
     if _tars is None:

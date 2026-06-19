@@ -1,9 +1,11 @@
 package com.tars.app
 
+import android.Manifest
 import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -18,6 +20,7 @@ import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
@@ -94,6 +97,7 @@ class MainActivity : AppCompatActivity() {
         val send = findViewById<Button>(R.id.send)
         val brainBtn = findViewById<Button>(R.id.brain)
         val voiceBtn = findViewById<Button>(R.id.voice)
+        val micBtn = findViewById<Button>(R.id.mic)
         stream = findViewById(R.id.log)
         streamScroll = findViewById(R.id.scroll)
 
@@ -114,7 +118,10 @@ class MainActivity : AppCompatActivity() {
             log("voice: ${if (speaker.enabled) "on" else "muted"}")
         }
         voiceBtn.setOnLongClickListener { installPiperVoice(); true }
+        micBtn.setOnClickListener { toggleEars() }
+        micBtn.setOnLongClickListener { installEars(); true }
         log("voice: long-press Voice to install the deep TARS voices, RU + EN (~60 MB)")
+        log("ears: long-press Mic to install speech recognition, then say \"Hey TARS\"")
         log("console: type to talk, or '\$ cmd' for shell, 'py code' for Python")
 
         worker.execute {
@@ -135,6 +142,12 @@ class MainActivity : AppCompatActivity() {
             // automatically so TARS thinks on-device from launch.
             brainExec.execute { autoStartLocalBrain() }
             PiperVoice.load(this) { line -> log(line) }
+            // If the speech models are already installed, start hands-free
+            // listening so "Hey TARS" works from launch.
+            Ears.load(this) { line -> log(line) }
+            if (Ears.isReady() && hasMicPermission()) {
+                Ears.start(this, { heard -> onHeard(heard) }) { line -> log(line) }
+            }
             Updater.checkAndPrompt(this) { line -> log(line) }
         }
 
@@ -165,6 +178,11 @@ class MainActivity : AppCompatActivity() {
 
         appendLine("\nyou> $text")
         log("chat: sent \"${text.take(40)}\"")
+        converse(text)
+    }
+
+    /** Send one utterance (typed or heard) to the brain, show + speak the reply. */
+    private fun converse(text: String) {
         setState("THINKING")
         worker.execute {
             val reply = try {
@@ -179,8 +197,93 @@ class MainActivity : AppCompatActivity() {
                 appendLine("TARS> $reply")
                 if (!reply.startsWith("[error]")) speakReply(reply)
                 setState("TALKING")
+                lastReplyAt = System.currentTimeMillis()
                 val ms = (reply.length * 55L).coerceIn(1500L, 12000L)
                 ui.postDelayed({ if (state == "TALKING") setState("STANDBY") }, ms)
+            }
+        }
+    }
+
+    // ---- Ears: hands-free "Hey TARS" speech input ----
+
+    // After TARS answers, stay open for follow-ups for a short window without
+    // needing the wake word again — like a real back-and-forth.
+    @Volatile private var lastReplyAt = 0L
+    private val wakeWord = Regex("(?i)\\b(hey[ ,]+)?(tars|тарс|тарз)\\b")
+
+    /** A transcribed utterance from the mic. Respond only if addressed to TARS:
+     *  the wake word was spoken, or we're still inside the follow-up window. */
+    private fun onHeard(text: String) {
+        val clean = text.trim()
+        if (clean.isBlank()) return
+        log("ears: heard \"${clean.take(60)}\"")
+        val match = wakeWord.find(clean)
+        val withinWindow = System.currentTimeMillis() - lastReplyAt < 20000
+        val command = when {
+            match != null -> clean.removeRange(match.range).trim().trim(',', '.', '!', '?', ' ')
+            withinWindow -> clean
+            else -> return   // overheard speech, not for TARS
+        }
+        runOnUiThread { appendLine("\nyou 🎙 $clean") }
+        if (command.isBlank()) {
+            // Just "Hey TARS" with nothing else — acknowledge and open the window.
+            lastReplyAt = System.currentTimeMillis()
+            runOnUiThread {
+                appendLine("TARS> Слушаю.")
+                speakReply("Слушаю.")
+                setState("TALKING")
+                ui.postDelayed({ if (state == "TALKING") setState("STANDBY") }, 1500)
+            }
+            return
+        }
+        converse(command)
+    }
+
+    private fun hasMicPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+
+    /** Toggle hands-free listening (requesting the mic permission if needed). */
+    private fun toggleEars() {
+        if (Ears.isListening()) {
+            Ears.stop(); log("ears: stopped listening")
+            return
+        }
+        if (!hasMicPermission()) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC)
+            return
+        }
+        if (!Ears.isReady()) {
+            log("ears: no speech model yet — long-press Mic to install (~40 MB)")
+            return
+        }
+        Ears.start(this, { heard -> onHeard(heard) }) { line -> log(line) }
+    }
+
+    /** Long-press Mic: download + install the speech models (one time). */
+    private fun installEars() {
+        log("ears: installing speech recognition (RU + EN)…")
+        voiceExec.execute {
+            if (::bridge.isInitialized) {
+                Ears.install(this, bridge) { l -> log(l) }
+                if (Ears.isReady() && hasMicPermission()) {
+                    Ears.start(this, { heard -> onHeard(heard) }) { line -> log(line) }
+                }
+            } else {
+                log("ears: core still starting — try again in a moment")
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_MIC) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                log("ears: mic permission granted")
+                if (Ears.isReady()) Ears.start(this, { heard -> onHeard(heard) }) { line -> log(line) }
+                else installEars()
+            } else {
+                log("ears: mic permission denied — voice input off")
             }
         }
     }
@@ -435,6 +538,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         ui.removeCallbacksAndMessages(null)
         if (::speaker.isInitialized) speaker.shutdown()
+        Ears.stop()
         PiperVoice.stop()
         LlamaServer.stop()
         worker.shutdownNow()
@@ -442,5 +546,9 @@ class MainActivity : AppCompatActivity() {
         termExec.shutdownNow()
         voiceExec.shutdownNow()
         super.onDestroy()
+    }
+
+    companion object {
+        private const val REQ_MIC = 101
     }
 }

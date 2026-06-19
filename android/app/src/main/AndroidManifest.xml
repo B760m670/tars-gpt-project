@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- TARS listens for "Hey TARS" and transcribes speech on-device. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Let TARS install its own downloaded update (Android 8+). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
