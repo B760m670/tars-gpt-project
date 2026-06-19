@@ -1,6 +1,7 @@
 package com.tars.app
 
 import android.content.Context
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -214,6 +215,70 @@ object LlamaServer {
         } catch (e: Exception) {
             "(can't read server log: ${e.message})"
         }
+    }
+
+    /** Public readiness probe for the chat path. */
+    fun ready(): Boolean = health()
+
+    /** Stream a chat completion token-by-token so TARS can talk WHILE he thinks.
+     *  [messagesJson] is the OpenAI 'messages' array (built by Python). Each clean
+     *  delta (Qwen3's <think> monologue stripped out live) is handed to [onClean]
+     *  as it arrives. Returns the full clean reply, or "" on failure. */
+    fun streamChat(messagesJson: String, onClean: (String) -> Unit, log: (String) -> Unit): String {
+        val raw = StringBuilder()
+        val clean = StringBuilder()
+        var emitted = 0
+        val body = "{\"messages\":$messagesJson," +
+            "\"temperature\":0.7,\"top_p\":0.8,\"max_tokens\":240,\"stream\":true}"
+        var c: HttpURLConnection? = null
+        try {
+            c = URL("http://127.0.0.1:8080/v1/chat/completions").openConnection() as HttpURLConnection
+            c.requestMethod = "POST"
+            c.doOutput = true
+            c.connectTimeout = 5000
+            c.readTimeout = 120000
+            c.setRequestProperty("Content-Type", "application/json")
+            c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            if (c.responseCode !in 200..299) {
+                val err = c.errorStream?.bufferedReader()?.readText() ?: ""
+                log("brain: stream HTTP ${c.responseCode} — ${err.take(160)}")
+                return ""
+            }
+            c.inputStream.bufferedReader(Charsets.UTF_8).forEachLine { line ->
+                if (!line.startsWith("data:")) return@forEachLine
+                val data = line.substring(5).trim()
+                if (data == "[DONE]" || data.isEmpty()) return@forEachLine
+                val piece = try {
+                    JSONObject(data).getJSONArray("choices").getJSONObject(0)
+                        .optJSONObject("delta")?.optString("content") ?: ""
+                } catch (e: Exception) { "" }
+                if (piece.isEmpty()) return@forEachLine
+                raw.append(piece)
+                val visible = stripThink(raw.toString())
+                if (visible.length > emitted) {
+                    val chunk = visible.substring(emitted)
+                    emitted = visible.length
+                    clean.append(chunk)
+                    onClean(chunk)
+                }
+            }
+        } catch (e: Exception) {
+            log("brain: stream error — ${e.message}")
+        } finally {
+            try { c?.disconnect() } catch (e: Exception) {}
+        }
+        return clean.toString().trim()
+    }
+
+    /** Remove Qwen3's <think>…</think> monologue as text streams in. While the
+     *  block is still open (no closing tag yet), everything after <think> is held
+     *  back so it's never shown or spoken. */
+    private fun stripThink(s: String): String {
+        val open = s.indexOf("<think>")
+        if (open < 0) return s
+        val close = s.indexOf("</think>")
+        if (close < 0) return s.substring(0, open)
+        return s.substring(0, open) + s.substring(close + "</think>".length)
     }
 
     /** True once llama-server answers /health with status ok (200). */

@@ -104,6 +104,39 @@ def respond(text: str) -> str:
     return _tars.respond(text)
 
 
+def chat_messages(text: str) -> str:
+    """Build the full OpenAI 'messages' array (system prompt + recent history +
+    this user turn) as JSON, for the Kotlin STREAMING path to POST straight to
+    llama-server. Mirrors what the local brain sends — including Qwen3's /no_think
+    switch on the user turn so the model skips its slow internal monologue. This is
+    what lets TARS start speaking the first sentence while still generating the
+    rest, instead of going mute until the whole reply is done."""
+    import json
+    if _tars is None:
+        init(".")
+    from .personality import build_system_prompt
+    system = build_system_prompt(_tars.settings.personality, _tars.memory.facts_text())
+    history = _tars.memory.recent_turns(_tars.settings.history_turns)
+    msgs = [{"role": "system", "content": system}]
+    msgs.extend({"role": m["role"], "content": m["content"]} for m in history)
+    msgs.append({"role": "user", "content": "/no_think " + text})
+    return json.dumps(msgs, ensure_ascii=False)
+
+
+def save_turn(user_text: str, assistant_text: str) -> bool:
+    """Persist a completed streamed exchange (the streaming path bypasses respond(),
+    so it records the turn itself). Empties are skipped."""
+    if _tars is None or not assistant_text.strip():
+        return False
+    _tars.memory.add_turn("user", user_text)
+    _tars.memory.add_turn("assistant", assistant_text.strip())
+    try:
+        _tars.brain.last_used = "local"   # keep diagnostics honest
+    except Exception:
+        pass
+    return True
+
+
 def active_brain() -> str:
     """Which driver answered last (or 'auto' before the first reply) — handy for
     a status line in the UI."""

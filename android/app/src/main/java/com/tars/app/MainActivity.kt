@@ -89,6 +89,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Append text WITHOUT a leading newline — used while streaming a reply in so
+     *  it grows word by word on one line. Safe to call from any thread. */
+    private fun appendInline(text: String) {
+        ui.post {
+            if (!::stream.isInitialized) return@post
+            stream.append(text)
+            streamScroll.post { streamScroll.fullScroll(ScrollView.FOCUS_DOWN) }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -185,31 +195,120 @@ class MainActivity : AppCompatActivity() {
         converse(text)
     }
 
-    /** Send one utterance (typed or heard) to the brain, show + speak the reply. */
+    /** Send one utterance (typed or heard) to the brain. When the on-device engine
+     *  is up, TARS STREAMS — he starts speaking the first sentence while still
+     *  generating the rest, so he feels like he's thinking aloud, not buffering.
+     *  Otherwise he falls back to the one-shot path (offline brain). */
     private fun converse(text: String) {
         setState("THINKING")
         worker.execute {
-            val reply = try {
-                bridge.callAttr("respond", text).toString()
-            } catch (e: Exception) {
-                log("chat error: ${e.message}")
-                "[error] ${e.message}"
+            if (tryStreamLocal(text)) return@execute
+            converseOneShot(text)
+        }
+    }
+
+    /** Stream from the local engine, speaking sentence-by-sentence as it generates.
+     *  Returns true if it handled the turn; false to fall back to the offline path. */
+    private fun tryStreamLocal(userText: String): Boolean {
+        if (!LlamaServer.isRunning() || !LlamaServer.ready()) return false
+        val messages = try {
+            bridge.callAttr("chat_messages", userText).toString()
+        } catch (e: Exception) { log("chat: couldn't build prompt — ${e.message}"); return false }
+        if (messages.isBlank()) return false
+
+        // A dedicated speech thread drains a queue of finished sentences, so
+        // generation and speaking overlap (the whole point — no dead air).
+        val queue = java.util.concurrent.LinkedBlockingQueue<String>()
+        val poison = " "
+        val speech = Thread {
+            while (true) {
+                val s = try { queue.take() } catch (e: InterruptedException) { break }
+                if (s == poison) break
+                if (s.isNotBlank()) speakSentenceBlocking(s)
             }
-            val report = try { bridge.callAttr("last_brain_report").toString() } catch (e: Exception) { "?" }
-            log("chat: $report")
-            // Be honest when the scripted backup answered only because the real
-            // engine is still loading — so a slow startup never looks like failure.
-            if (report.contains("used=offline") && LlamaServer.isRunning()) {
-                log("brain: that was the backup voice — the on-device engine is still warming up. Give it a few seconds, then ask again.")
+        }.apply { isDaemon = true; start() }
+
+        val sentence = StringBuilder()
+        var startedTalking = false
+        val full = LlamaServer.streamChat(messages, { chunk ->
+            if (!startedTalking) {
+                startedTalking = true
+                runOnUiThread { appendInline("\nTARS> "); setState("TALKING") }
             }
-            runOnUiThread {
-                appendLine("TARS> $reply")
-                if (!reply.startsWith("[error]")) speakReply(reply)
-                setState("TALKING")
-                lastReplyAt = System.currentTimeMillis()
-                val ms = (reply.length * 55L).coerceIn(1500L, 12000L)
-                ui.postDelayed({ if (state == "TALKING") setState("STANDBY") }, ms)
+            runOnUiThread { appendInline(chunk) }
+            sentence.append(chunk)
+            // Flush every complete sentence to the voice as soon as it lands.
+            while (true) {
+                val end = sentenceEnd(sentence)
+                if (end < 0) break
+                val s = sentence.substring(0, end + 1).trim()
+                sentence.delete(0, end + 1)
+                if (s.isNotBlank()) queue.put(s)
             }
+        }) { l -> log(l) }
+
+        // Speak whatever's left over (a final clause with no closing punctuation).
+        val tail = sentence.toString().trim()
+        if (tail.isNotBlank()) queue.put(tail)
+        queue.put(poison)
+
+        if (full.isBlank()) {
+            if (startedTalking) runOnUiThread { appendInline("…") }
+            else { log("chat: local engine returned nothing — using backup"); return false }
+        }
+        log("chat: used=local (streamed)")
+        try { bridge.callAttr("save_turn", userText, full) } catch (e: Exception) {}
+        runOnUiThread {
+            lastReplyAt = System.currentTimeMillis()
+            val ms = (full.length * 55L).coerceIn(1500L, 12000L)
+            ui.postDelayed({ if (state == "TALKING") setState("STANDBY") }, ms)
+        }
+        return true
+    }
+
+    /** One-shot reply (no streaming): the offline brain, or the engine if it can't
+     *  stream. Honest when the backup answers only because the engine's still warming up. */
+    private fun converseOneShot(text: String) {
+        val reply = try {
+            bridge.callAttr("respond", text).toString()
+        } catch (e: Exception) {
+            log("chat error: ${e.message}")
+            "[error] ${e.message}"
+        }
+        val report = try { bridge.callAttr("last_brain_report").toString() } catch (e: Exception) { "?" }
+        log("chat: $report")
+        if (report.contains("used=offline") && LlamaServer.isRunning()) {
+            log("brain: that was the backup voice — the on-device engine is still warming up. Give it a few seconds, then ask again.")
+        }
+        runOnUiThread {
+            appendLine("TARS> $reply")
+            if (!reply.startsWith("[error]")) speakReply(reply)
+            setState("TALKING")
+            lastReplyAt = System.currentTimeMillis()
+            val ms = (reply.length * 55L).coerceIn(1500L, 12000L)
+            ui.postDelayed({ if (state == "TALKING") setState("STANDBY") }, ms)
+        }
+    }
+
+    /** The first sentence-ending position in [sb], or -1 if none yet. Russian and
+     *  English share .!?… and we also break on a newline. */
+    private fun sentenceEnd(sb: CharSequence): Int {
+        for (i in sb.indices) {
+            when (sb[i]) {
+                '.', '!', '?', '…', '\n' -> return i
+            }
+        }
+        return -1
+    }
+
+    /** Speak one sentence and BLOCK until it's done, so the queue stays in order. */
+    private fun speakSentenceBlocking(text: String) {
+        if (!speaker.enabled) return
+        val lang = if (cyrillic.containsMatchIn(text)) "ru" else "en"
+        if (PiperVoice.isReady(lang)) {
+            PiperVoice.speak(text, lang) { l -> log(l) }
+        } else {
+            runOnUiThread { speaker.speak(text) }
         }
     }
 
