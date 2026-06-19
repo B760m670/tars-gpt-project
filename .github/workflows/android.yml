@@ -50,11 +50,18 @@ jobs:
       - name: Build llama.cpp server (arm64-v8a)
         run: |
           set -e
-          # Pin to b5500 (mid-2025): late enough to include the Qwen3 architecture
+          # Use the newest llama.cpp release tag (b*). llama.cpp doesn't tag every
+          # build number (so a hand-picked "b5500" may not exist) — discover the
+          # latest real tag instead. Any current release has the Qwen3 architecture
           # and the --jinja / -fa / KV-cache-quant server options TARS relies on
-          # (b5012 predates Qwen3). We build only the llama-server target, so the
-          # multimodal (mtmd) pieces aren't needed.
-          git clone --depth 1 --branch b5500 https://github.com/ggml-org/llama.cpp /tmp/llama.cpp
+          # (the old b5012 pin predated Qwen3). We build only the llama-server
+          # target, so the multimodal (mtmd) pieces aren't needed.
+          LLAMA_TAG="$(git ls-remote --tags --refs --sort=-v:refname \
+            https://github.com/ggml-org/llama.cpp 'refs/tags/b*' \
+            | head -n1 | sed 's#.*refs/tags/##')"
+          echo "using llama.cpp tag: $LLAMA_TAG"
+          test -n "$LLAMA_TAG"
+          git clone --depth 1 --branch "$LLAMA_TAG" https://github.com/ggml-org/llama.cpp /tmp/llama.cpp
           NDK="$ANDROID_SDK_ROOT/ndk/26.1.10909125"
           # Target ARMv8.2-A with dot-product (sdot/udot) + FP16 arithmetic. The
           # build aims at modern phones (e.g. Galaxy A32 / Helio G80, Cortex-A75)
