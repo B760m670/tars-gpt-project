@@ -88,7 +88,7 @@ def load_settings() -> Settings:
         local_url=os.environ.get("TARS_LOCAL_URL", "http://127.0.0.1:8080"),
         local_model=os.environ.get("TARS_LOCAL_MODEL", "local"),
         ollama_url=os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"),
-        ollama_model=os.environ.get("OLLAMA_MODEL", "qwen2.5:3b"),
+        ollama_model=os.environ.get("OLLAMA_MODEL", "qwen3:4b"),
         memory_path=memory_path,
         history_turns=_int("TARS_HISTORY_TURNS", 12),
     )

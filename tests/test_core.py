@@ -45,10 +45,14 @@ class ModelManagerTests(unittest.TestCase):
     def test_midrange_phone_gets_a_light_model(self):
         pick = models.recommend(4000)
         self.assertIsNotNone(pick)
-        self.assertIn(pick.id, {"qwen2.5-0.5b", "qwen2.5-1.5b"})
+        self.assertIn(pick.id, {"qwen3-0.6b", "qwen3-1.7b"})
+
+    def test_galaxy_a32_6gb_gets_the_4b(self):
+        # The target device: ~6 GB RAM (reports ~5500 MB) should land on Qwen3-4B.
+        self.assertEqual(models.recommend(5500).id, "qwen3-4b")
 
     def test_flagship_gets_the_heaviest(self):
-        self.assertEqual(models.recommend(16000).id, "qwen2.5-7b")
+        self.assertEqual(models.recommend(16000).id, "qwen3-8b")
 
     def test_recommendation_is_monotonic(self):
         # More RAM never recommends a smaller model.

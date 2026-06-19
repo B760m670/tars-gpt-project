@@ -34,9 +34,22 @@ class LocalBrain(Brain):
             return False
 
     def reply(self, system: str, messages: List[Dict[str, str]]) -> str:
-        msgs = [{"role": "system", "content": system}]
+        # Qwen3 ships with a "thinking" mode that emits a long internal monologue
+        # before the answer — wrong for a deadpan, spoken TARS and far too slow on
+        # a phone. The "/no_think" soft switch in the system message turns it off
+        # (the server is started with --jinja so the model's own template honours
+        # it). Harmless on models that don't have the switch.
+        sys_text = system.rstrip() + "\n\n/no_think"
+        msgs = [{"role": "system", "content": sys_text}]
         msgs.extend({"role": m["role"], "content": m["content"]} for m in messages)
-        payload = {"model": self.model, "messages": msgs, "temperature": 0.9}
+        # Qwen3's recommended non-thinking sampling (temp 0.7 / top_p 0.8) keeps
+        # him sharp and in-character without rambling.
+        payload = {
+            "model": self.model,
+            "messages": msgs,
+            "temperature": 0.7,
+            "top_p": 0.8,
+        }
         data = post_json(
             "{}/v1/chat/completions".format(self.url), payload, timeout=180
         )

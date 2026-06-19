@@ -32,9 +32,11 @@ detects the language too.)
 All of this is $0 and fully offline:
 
 - **Brain (on-device, free):** an embedded **llama.cpp** engine loads a **GGUF
-  model you pick from the built-in manager** — a ladder from *Feather* (0.5B,
-  runs on a modest phone) to *Heavy* (7B, flagships). TARS reads the device RAM
-  and recommends the heaviest model that fits; type `/models` to see the list.
+  model you pick from the built-in manager** — a ladder of **Qwen3** from *Feather*
+  (0.6B, runs on a modest phone) to *Heavy* (8B, flagships). TARS reads the device
+  RAM and recommends the heaviest model that fits (a 6 GB phone gets **Qwen3-4B**);
+  type `/models` to see the list. Qwen3's "thinking" mode is turned off so TARS
+  speaks instead of monologuing.
   (This is the "install models, light to heavy" idea — done with the engine
   Ollama itself uses, so nothing extra has to be installed on the phone.)
 - **Brain (power users):** point at an **Ollama** server on a PC/Termux.

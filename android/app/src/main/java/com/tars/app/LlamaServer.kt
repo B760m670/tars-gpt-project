@@ -121,8 +121,17 @@ object LlamaServer {
             "-m", model.absolutePath,
             "--host", "127.0.0.1",
             "--port", "8080",
-            "-c", "2048",
-            "-t", threads.toString()
+            "-c", "4096",
+            "-t", threads.toString(),
+            // Use the model's own chat template so Qwen3's "/no_think" switch is
+            // honoured (TARS speaks, he doesn't think out loud).
+            "--jinja",
+            // Flash attention + an 8-bit KV cache roughly halve the memory the
+            // context uses, so the 4B model fits comfortably on a 6 GB phone and
+            // runs a little faster.
+            "-fa",
+            "--cache-type-k", "q8_0",
+            "--cache-type-v", "q8_0"
         )
         pb.redirectErrorStream(true)
         pb.redirectOutput(logFile(ctx))

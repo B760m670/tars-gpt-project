@@ -41,36 +41,39 @@ class ModelSpec:
         return "https://huggingface.co/{}/resolve/main/{}".format(self.repo, self.filename)
 
 
-# Qwen2.5-Instruct: strong, genuinely multilingual (good Russian), Apache-2.0,
-# official GGUFs. A clean ladder from "runs almost anywhere" to "flagship only".
+# Qwen3-Instruct: the current generation (newer than Qwen2.5), strong and
+# genuinely multilingual (good Russian), Apache-2.0, official GGUFs. A clean
+# ladder from "runs almost anywhere" to "flagship only". Thinking mode is turned
+# OFF for TARS (see LocalBrain) — his replies are spoken, not internal monologue.
 CATALOG: List[ModelSpec] = [
     ModelSpec(
-        id="qwen2.5-0.5b", label="Feather", params="0.5B",
-        file_mb=400, min_ram_mb=1200,
-        repo="Qwen/Qwen2.5-0.5B-Instruct-GGUF",
-        filename="qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        id="qwen3-0.6b", label="Feather", params="0.6B",
+        file_mb=500, min_ram_mb=1200,
+        repo="Qwen/Qwen3-0.6B-GGUF",
+        filename="Qwen3-0.6B-Q4_K_M.gguf",
         note="Lightest. A pulse on a modest phone — terse, but his own words.",
     ),
     ModelSpec(
-        id="qwen2.5-1.5b", label="Light", params="1.5B",
+        id="qwen3-1.7b", label="Light", params="1.7B",
         file_mb=1100, min_ram_mb=2400,
-        repo="Qwen/Qwen2.5-1.5B-Instruct-GGUF",
-        filename="qwen2.5-1.5b-instruct-q4_k_m.gguf",
-        note="The sweet spot for a normal mid-range phone (Android 8+).",
+        repo="Qwen/Qwen3-1.7B-GGUF",
+        filename="Qwen3-1.7B-Q4_K_M.gguf",
+        note="A good fit for a normal mid-range phone.",
     ),
     ModelSpec(
-        id="qwen2.5-3b", label="Standard", params="3B",
-        file_mb=2000, min_ram_mb=3500,
-        repo="Qwen/Qwen2.5-3B-Instruct-GGUF",
-        filename="qwen2.5-3b-instruct-q4_k_m.gguf",
-        note="Noticeably wittier. Wants a good phone with room to spare.",
+        id="qwen3-4b", label="Standard", params="4B",
+        file_mb=2500, min_ram_mb=3700,
+        repo="Qwen/Qwen3-4B-GGUF",
+        filename="Qwen3-4B-Q4_K_M.gguf",
+        note="The sweet spot for a 6 GB phone (Galaxy A32-class). Noticeably "
+             "sharper in character — TARS's recommended mind.",
     ),
     ModelSpec(
-        id="qwen2.5-7b", label="Heavy", params="7B",
-        file_mb=4700, min_ram_mb=8000,
-        repo="Qwen/Qwen2.5-7B-Instruct-GGUF",
-        filename="qwen2.5-7b-instruct-q4_k_m.gguf",
-        note="A real on-device mind. Flagships only.",
+        id="qwen3-8b", label="Heavy", params="8B",
+        file_mb=5000, min_ram_mb=8000,
+        repo="Qwen/Qwen3-8B-GGUF",
+        filename="Qwen3-8B-Q4_K_M.gguf",
+        note="A real on-device mind. Flagships with 12 GB+ only.",
     ),
 ]
 
