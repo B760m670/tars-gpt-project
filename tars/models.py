@@ -53,30 +53,53 @@ class ModelSpec:
         return "https://huggingface.co/{}/resolve/main/{}".format(self.repo, self.mmproj_filename)
 
 
-# Qwen2.5-VL-Instruct: a multimodal mind — it SEES and talks. TARS is a voice +
-# vision robot, not a text chatbot, so his brain is vision-capable by default:
-# the same model handles speech (transcribed by the ears) and what the camera
-# sees, and answers out loud. Genuinely multilingual (good Russian), Apache-2.0,
-# with mtmd-ready GGUFs (main model + an mmproj vision projector) from ggml-org.
+# Qwen3-Instruct (text). TARS is a voice robot — he hears and speaks; this is the
+# brain we're verifying first because it's light enough to actually load on a 6 GB
+# phone (and it's the model already downloaded on the test device). Vision returns
+# as a separate, verified step on a multimodal model (Qwen2.5-VL, see VISION_CATALOG),
+# once the core hear->think->speak loop is proven on-device.
 CATALOG: List[ModelSpec] = [
     ModelSpec(
-        id="qwen2.5-vl-3b", label="Standard", params="3B",
+        id="qwen3-0.6b", label="Feather", params="0.6B",
+        file_mb=500, min_ram_mb=1200,
+        repo="Qwen/Qwen3-0.6B-GGUF",
+        filename="Qwen3-0.6B-Q4_K_M.gguf",
+        note="Lightest. A pulse on a modest phone — terse, but his own words.",
+    ),
+    ModelSpec(
+        id="qwen3-1.7b", label="Light", params="1.7B",
+        file_mb=1100, min_ram_mb=2400,
+        repo="Qwen/Qwen3-1.7B-GGUF",
+        filename="Qwen3-1.7B-Q4_K_M.gguf",
+        note="A good fit for a normal mid-range phone.",
+    ),
+    ModelSpec(
+        id="qwen3-4b", label="Standard", params="4B",
+        file_mb=2500, min_ram_mb=3700,
+        repo="Qwen/Qwen3-4B-GGUF",
+        filename="Qwen3-4B-Q4_K_M.gguf",
+        note="The sweet spot for a 6 GB phone (Galaxy A32-class) — TARS's voice mind.",
+    ),
+    ModelSpec(
+        id="qwen3-8b", label="Heavy", params="8B",
+        file_mb=5000, min_ram_mb=8000,
+        repo="Qwen/Qwen3-8B-GGUF",
+        filename="Qwen3-8B-Q4_K_M.gguf",
+        note="A real on-device mind. Flagships with 12 GB+ only.",
+    ),
+]
+
+# Multimodal brains (vision). Wired and ready, but not the default until the core
+# loop is verified and we've confirmed one actually loads in 6 GB on the A32.
+VISION_CATALOG: List[ModelSpec] = [
+    ModelSpec(
+        id="qwen2.5-vl-3b", label="Standard (vision)", params="3B",
         file_mb=2200, min_ram_mb=3700,
         repo="ggml-org/Qwen2.5-VL-3B-Instruct-GGUF",
         filename="Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
         mmproj_filename="mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
         mmproj_mb=1300,
-        note="TARS's eyes + voice on a 6 GB phone (Galaxy A32-class). Sees through "
-             "the camera and talks — one multimodal mind.",
-    ),
-    ModelSpec(
-        id="qwen2.5-vl-7b", label="Heavy", params="7B",
-        file_mb=4700, min_ram_mb=8000,
-        repo="ggml-org/Qwen2.5-VL-7B-Instruct-GGUF",
-        filename="Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
-        mmproj_filename="mmproj-Qwen2.5-VL-7B-Instruct-f16.gguf",
-        mmproj_mb=1400,
-        note="A sharper-eyed mind. Flagships with 12 GB+ only.",
+        note="TARS's eyes + voice on a 6 GB phone: sees through the camera and talks.",
     ),
 ]
 

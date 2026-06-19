@@ -310,6 +310,14 @@ class MainActivity : AppCompatActivity() {
 
     /** Eye tap: take one look right now and comment. Opens the camera if needed. */
     private fun lookNow(ask: String) {
+        // This build runs the text+voice brain; eyes need the multimodal model.
+        val visionModel = try {
+            bridge.callAttr("recommended_model").toString().split("|").getOrElse(4) { "" }.isNotBlank()
+        } catch (e: Exception) { false }
+        if (!visionModel) {
+            log("vision: this build runs the voice brain — eyes return on the vision model (next, verified step)")
+            return
+        }
         if (!hasCamPermission()) { requestPermissions(arrayOf(Manifest.permission.CAMERA), REQ_CAM); return }
         if (!LlamaServer.isRunning()) {
             log("vision: start the brain first (tap Brain) — the eyes need the vision model")

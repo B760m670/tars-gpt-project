@@ -83,7 +83,11 @@ object Ears {
                     download(ASR_URL, archive, log)
                 }
                 log("ears: unpacking speech model…")
-                val dir = bridge.callAttr("extract_archive", archive.absolutePath, root(ctx).absolutePath).toString()
+                // Extract into a CLEAN subdir, not root/ — root also holds the
+                // archive (and later the VAD), which made the unpacker return the
+                // wrong folder and "lose" the encoder/decoder/tokens files.
+                val asrDir = File(root(ctx), "asr").apply { deleteRecursively(); mkdirs() }
+                val dir = bridge.callAttr("extract_archive", archive.absolutePath, asrDir.absolutePath).toString()
                 val enc = pick(dir, "encoder")
                 val dec = pick(dir, "decoder")
                 val tok = pick(dir, "tokens")

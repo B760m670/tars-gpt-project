@@ -118,6 +118,10 @@ object LlamaServer {
             return
         }
         val threads = Runtime.getRuntime().availableProcessors().coerceAtLeast(2)
+        // Kept deliberately minimal so the server reliably STARTS. (An earlier
+        // bare "-fa" crashed newer llama.cpp, which now requires "-fa on"; flash
+        // attention + KV-cache quant are optimizations we can re-add once the core
+        // is verified on-device.)
         val args = arrayListOf(
             bin.absolutePath,
             "-m", model.absolutePath,
@@ -125,14 +129,8 @@ object LlamaServer {
             "--port", "8080",
             "-c", "4096",
             "-t", threads.toString(),
-            // Use the model's own chat template so the model-specific switches are
-            // honoured (TARS speaks, he doesn't think out loud).
-            "--jinja",
-            // Flash attention + an 8-bit KV cache roughly halve the memory the
-            // context uses, so the model fits on a 6 GB phone and runs a bit faster.
-            "-fa",
-            "--cache-type-k", "q8_0",
-            "--cache-type-v", "q8_0"
+            // Use the model's own chat template (e.g. Qwen3's /no_think switch).
+            "--jinja"
         )
         if (mmproj != null && mmproj.exists()) {
             args.add("--mmproj"); args.add(mmproj.absolutePath)
