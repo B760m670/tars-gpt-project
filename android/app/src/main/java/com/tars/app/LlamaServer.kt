@@ -42,22 +42,52 @@ object LlamaServer {
         }
     }
 
-    /** Download a GGUF model with coarse progress logging. Returns the file. */
+    /** Download a GGUF model RELIABLY over flaky mobile networks: it resumes from
+     *  a partial .part file (HTTP Range) and retries on failure, so a 1 GB model
+     *  survives dropped connections instead of starting over. Returns the file. */
     fun downloadModel(url: String, dest: File, log: (String) -> Unit): File {
         if (dest.exists() && dest.length() > 0) {
             log("brain: model already present")
             return dest
         }
         val tmp = File(dest.absolutePath + ".part")
+        var attempt = 0
+        while (true) {
+            attempt++
+            try {
+                downloadResumable(url, tmp, log)
+                if (!tmp.renameTo(dest)) throw IllegalStateException("couldn't finalize model file")
+                log("brain: model download complete (${dest.length() / (1024 * 1024)} MB)")
+                return dest
+            } catch (e: Exception) {
+                val have = if (tmp.exists()) tmp.length() / (1024 * 1024) else 0
+                if (attempt >= 8) {
+                    log("brain: model download failed after $attempt tries (${have} MB) — ${e.message}")
+                    throw e
+                }
+                log("brain: download interrupted (${have} MB) — retry $attempt in 3s (${e.message})")
+                Thread.sleep(3000)
+            }
+        }
+    }
+
+    private fun downloadResumable(url: String, tmp: File, log: (String) -> Unit) {
+        val from = if (tmp.exists()) tmp.length() else 0L
         val c = URL(url).openConnection() as HttpURLConnection
         c.instanceFollowRedirects = true
         c.connectTimeout = 20000
         c.readTimeout = 60000
-        val total = c.contentLengthLong
-        var done = 0L
+        if (from > 0) c.setRequestProperty("Range", "bytes=$from-")
+        c.connect()
+        val code = c.responseCode
+        // 206 = resumed; 200 = server ignored Range, so restart from scratch.
+        val append = code == 206
+        if (!append && from > 0) tmp.delete()
+        val total = from + c.contentLengthLong
+        var done = if (append) from else 0L
         var lastPct = -1
         c.inputStream.use { input ->
-            FileOutputStream(tmp).use { out ->
+            FileOutputStream(tmp, append).use { out ->
                 val buf = ByteArray(1 shl 16)
                 while (true) {
                     val n = input.read(buf)
@@ -66,17 +96,11 @@ object LlamaServer {
                     done += n
                     if (total > 0) {
                         val pct = (done * 100 / total).toInt()
-                        if (pct >= lastPct + 5) {
-                            lastPct = pct
-                            log("brain: downloading model… $pct%")
-                        }
+                        if (pct >= lastPct + 5) { lastPct = pct; log("brain: downloading model… $pct%") }
                     }
                 }
             }
         }
-        if (!tmp.renameTo(dest)) throw IllegalStateException("couldn't finalize model file")
-        log("brain: model download complete (${dest.length() / (1024 * 1024)} MB)")
-        return dest
     }
 
     /** Start the server against a downloaded model (no-op if already running). */
@@ -84,7 +108,7 @@ object LlamaServer {
         if (isRunning()) return
         val bin = binary(ctx)
         if (!bin.exists()) {
-            log("brain: on-device engine not bundled for this CPU — using cloud/offline")
+            log("brain: on-device engine not bundled for this CPU — offline mode")
             return
         }
         if (!model.exists()) {

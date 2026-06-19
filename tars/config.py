@@ -79,7 +79,7 @@ def load_settings() -> Settings:
     )
     brain_order = [
         b.strip()
-        for b in os.environ.get("TARS_BRAIN_ORDER", "groq,gemini,local,ollama,offline").split(",")
+        for b in os.environ.get("TARS_BRAIN_ORDER", "local,ollama,offline").split(",")
         if b.strip()
     ]
     memory_path = Path(os.environ.get("TARS_MEMORY") or _default_memory_path())
