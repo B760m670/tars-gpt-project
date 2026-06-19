@@ -63,16 +63,16 @@ _RESPONSES = {
 # Said when the message doesn't match any intent. TARS stays in character and is
 # honest that he's the limited offline brain.
 _FALLBACK = (
-    ["Сейчас я работаю офлайн, без большого мозга, так что отвечу коротко: я тебя услышал. "
-     "Дай мне сеть или ключ — и я разверну мысль как следует.",
-     "Связи с умной частью меня нет. Офлайн-режим: понимаю тебя, но блистать пока не могу. "
-     "Подключи интернет или Gemini/Groq — и я оживу полностью.",
-     "Честно, на 90%: без сети я больше характер, чем разум. Запомнил, отвечу подробно, когда вернётся связь."],
-    ["I'm offline right now, without the big brain, so I'll keep it short: I heard you. "
-     "Give me a network or a key and I'll think this through properly.",
-     "No link to the clever part of me. Offline mode: I follow you, but I can't shine yet. "
-     "Connect the internet or a Gemini/Groq key and I'll fully wake up.",
-     "Honestly, at 90%: with no network I'm more character than intellect. Noted — I'll answer in full once we're back online."],
+    ["Сейчас я работаю на резервном контуре, без большого мозга, так что отвечу коротко: я тебя услышал. "
+     "Загрузи локальную модель — и я разверну мысль как следует.",
+     "Связи с умной частью меня нет. Резервный режим: понимаю тебя, но блистать пока не могу. "
+     "Нажми «Brain», скачай модель — и я оживу полностью.",
+     "Честно, на 90%: без модели я больше характер, чем разум. Запомнил, отвечу подробно, когда поднимется движок."],
+    ["I'm on the backup circuit right now, without the big brain, so I'll keep it short: I heard you. "
+     "Load the on-device model and I'll think this through properly.",
+     "No link to the clever part of me. Backup mode: I follow you, but I can't shine yet. "
+     "Tap 'Brain', download the model, and I'll fully wake up.",
+     "Honestly, at 90%: with no model I'm more character than intellect. Noted — I'll answer in full once the engine is up."],
 )
 
 _KEYWORDS = {

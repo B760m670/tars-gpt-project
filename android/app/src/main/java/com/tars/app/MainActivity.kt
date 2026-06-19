@@ -76,7 +76,6 @@ class MainActivity : AppCompatActivity() {
         val brainBtn = findViewById<Button>(R.id.brain)
         val terminalBtn = findViewById<Button>(R.id.terminal)
         val voiceBtn = findViewById<Button>(R.id.voice)
-        val keyBtn = findViewById<Button>(R.id.key)
         val log = findViewById<TextView>(R.id.log)
         val scroll = findViewById<ScrollView>(R.id.scroll)
 
@@ -98,7 +97,6 @@ class MainActivity : AppCompatActivity() {
             log("voice: ${if (speaker.enabled) "on" else "muted"}")
         }
         voiceBtn.setOnLongClickListener { installPiperVoice(); true }
-        keyBtn.setOnClickListener { showKeyDialog() }
         log("voice: long-press Voice to install the deep TARS voices, RU + EN (~60 MB)")
 
         worker.execute {
@@ -112,8 +110,6 @@ class MainActivity : AppCompatActivity() {
             }
             // If a local model is already downloaded, bring the on-device brain
             // up automatically so TARS thinks offline from launch.
-            // Apply any saved cloud keys so the smart brain is on from launch.
-            applySavedKeys()
             try {
                 val p = bridge.callAttr("get_personality").toString().split("|")
                 dials[0] = p[0].toInt(); dials[1] = p[1].toInt(); dials[2] = p[2].toInt()
@@ -405,62 +401,6 @@ class MainActivity : AppCompatActivity() {
     private fun stopVu() {
         ui.removeCallbacks(vuTick)
         for (b in vuBars) { b.pivotY = b.height.toFloat(); b.scaleY = 0.08f }
-    }
-
-    private fun prefs() = getSharedPreferences("tars", MODE_PRIVATE)
-
-    /** Push saved cloud keys into the Python brain (call on the worker thread). */
-    private fun applySavedKeys() {
-        val gk = prefs().getString("gemini", "") ?: ""
-        val qk = prefs().getString("groq", "") ?: ""
-        if (gk.isBlank() && qk.isBlank()) return
-        if (!::bridge.isInitialized) return
-        val avail = try { bridge.callAttr("set_keys", gk, qk).toString() } catch (e: Exception) { "?" }
-        log("keys: applied saved key(s); brains available: $avail")
-    }
-
-    /** Enter a free Gemini/Groq key so the smart cloud brain comes online. */
-    private fun showKeyDialog() {
-        val p = prefs()
-        val info = TextView(this).apply {
-            text = "Paste a FREE key to make TARS smart & fast (kept only on this device):\n" +
-                "• Groq:   console.groq.com/keys\n" +
-                "• Gemini: aistudio.google.com/apikey"
-            textSize = 12f
-            setPadding(0, 0, 0, 16)
-        }
-        val groq = EditText(this).apply {
-            hint = getString(R.string.key_groq_hint)
-            setText(p.getString("groq", ""))
-            setSingleLine(true)
-        }
-        val gemini = EditText(this).apply {
-            hint = getString(R.string.key_gemini_hint)
-            setText(p.getString("gemini", ""))
-            setSingleLine(true)
-        }
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(48, 24, 48, 0)
-            addView(info); addView(groq); addView(gemini)
-        }
-        AlertDialog.Builder(this)
-            .setTitle("TARS — API key")
-            .setView(root)
-            .setPositiveButton(getString(R.string.save)) { _, _ ->
-                val qk = groq.text.toString().trim()
-                val gk = gemini.text.toString().trim()
-                p.edit().putString("groq", qk).putString("gemini", gk).apply()
-                log("keys: saved")
-                worker.execute {
-                    val avail = try {
-                        bridge.callAttr("set_keys", gk, qk).toString()
-                    } catch (e: Exception) { "error: ${e.message}" }
-                    log("keys: brains available now: $avail")
-                }
-            }
-            .setNegativeButton("Close", null)
-            .show()
     }
 
     private fun showTerminal() {

@@ -107,11 +107,9 @@ def main() -> None:
     smart = any(b.name != "offline" and b.available() for b in tars.brain.brains)
     if not smart:
         print("[!] Running on the OFFLINE brain only — TARS stays in character but")
-        print("    can't truly think yet. Add a FREE key (no credit card) for the")
-        print("    full mind:")
-        print("    Gemini -> https://aistudio.google.com/apikey  (GEMINI_API_KEY)")
-        print("    Groq   -> https://console.groq.com/keys        (GROQ_API_KEY)")
-        print("    or run Ollama locally. See .env.example.\n")
+        print("    can't truly think yet. Start the on-device engine (llama.cpp")
+        print("    `llama-server`) or an Ollama server for the full mind.")
+        print("    See .env.example and /models for the catalog.\n")
 
     while True:
         try:

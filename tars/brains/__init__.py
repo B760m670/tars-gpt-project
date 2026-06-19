@@ -1,11 +1,9 @@
 """Brain socket: swappable LLM drivers + a hybrid router that falls back across
-them (free cloud first, local offline second)."""
+them (the on-device llama.cpp model first, the scripted offline brain last)."""
 from __future__ import annotations
 
 from ..config import Settings
 from .base import Brain, BrainError
-from .gemini import GeminiBrain
-from .groq import GroqBrain
 from .local import LocalBrain
 from .offline import OfflineBrain
 from .ollama import OllamaBrain
@@ -14,8 +12,6 @@ from .router import BrainRouter
 
 def build_brain(settings: Settings) -> BrainRouter:
     registry = {
-        "gemini": lambda: GeminiBrain(settings.gemini_key, settings.gemini_model),
-        "groq": lambda: GroqBrain(settings.groq_key, settings.groq_model),
         "local": lambda: LocalBrain(settings.local_url, settings.local_model),
         "ollama": lambda: OllamaBrain(settings.ollama_url, settings.ollama_model),
         "offline": lambda: OfflineBrain(),

@@ -6,11 +6,7 @@
     <string name="terminal">Term</string>
     <string name="voice">Voice</string>
     <string name="muted">Muted</string>
-    <string name="key">Key</string>
     <string name="logs">Logs</string>
-    <string name="key_groq_hint">Groq API key (free, fast 70B)</string>
-    <string name="key_gemini_hint">Gemini API key (free)</string>
-    <string name="save">Save</string>
     <string name="input_hint">Say something to TARS…</string>
     <string name="terminal_hint">command, or: py &lt;code&gt;…</string>
     <string name="run">Run</string>

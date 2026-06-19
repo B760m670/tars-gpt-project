@@ -20,7 +20,9 @@ from typing import List, Optional
 
 # Headroom factor: a model is only "fits" if its working-set RAM is at most this
 # fraction of total device RAM, leaving room for Android, the app, and the OS.
-_HEADROOM = 0.6
+# 0.7 lets a 6 GB phone (Galaxy A32-class) reach the 3B model, which carries the
+# TARS character noticeably better than the smaller ones.
+_HEADROOM = 0.7
 
 
 @dataclass(frozen=True)
@@ -58,7 +60,7 @@ CATALOG: List[ModelSpec] = [
     ),
     ModelSpec(
         id="qwen2.5-3b", label="Standard", params="3B",
-        file_mb=2000, min_ram_mb=4000,
+        file_mb=2000, min_ram_mb=3500,
         repo="Qwen/Qwen2.5-3B-Instruct-GGUF",
         filename="qwen2.5-3b-instruct-q4_k_m.gguf",
         note="Noticeably wittier. Wants a good phone with room to spare.",
@@ -98,7 +100,7 @@ def fits(spec: ModelSpec, ram_mb: int) -> bool:
 
 def recommend(ram_mb: Optional[int] = None) -> Optional[ModelSpec]:
     """The heaviest model that comfortably fits this device. None means even the
-    lightest won't fit — TARS should lean on cloud + the offline brain instead."""
+    lightest won't fit — TARS falls back to the scripted offline brain."""
     if ram_mb is None:
         ram_mb = total_ram_mb()
     if not ram_mb:

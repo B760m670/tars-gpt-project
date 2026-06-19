@@ -13,14 +13,15 @@ and you can plug in any compatible "driver" — the core doesn't care which:
 | Socket  | Job                       | Drivers (now → later)                          |
 |---------|---------------------------|------------------------------------------------|
 | Ears    | speech → text (STT)       | *(stub)* → Vosk / whisper.cpp / openWakeWord   |
-| **Brain** | text → witty TARS reply | **Gemini, Groq (free cloud) + on-device llama.cpp + Ollama + offline fallback** |
-| Voice   | text → speech (TTS)       | *(stub)* → **AI clone of the original TARS voice** (F5-TTS / XTTS / RVC) |
+| **Brain** | text → witty TARS reply | **on-device llama.cpp (GGUF) + Ollama (power users) + offline fallback** |
+| Voice   | text → speech (TTS)       | **Piper (sherpa-onnx), RU + EN** → **AI clone of the original TARS voice** (F5-TTS / XTTS / RVC) |
 | Memory  | remember you & the talk   | **SQLite** → + vector recall                   |
 
 **"Hybrid brain"** = the Brain socket holds several drivers and falls back:
-online → free cloud model (smarter); offline → a local model; and, as a
-guaranteed last resort, a **dependency-free offline brain** so TARS is *never*
-dead — with zero setup, no key and no network, he still answers in character.
+the **on-device model** does the real thinking; and, as a guaranteed last
+resort, a **dependency-free offline brain** so TARS is *never* dead — with zero
+setup, no network, he still answers in character. Everything runs locally and
+free — no cloud, no API keys, no quotas.
 
 **Bilingual.** TARS replies in the language you speak to him — **Russian or
 English** — keeping the same dry character in both. (The offline fallback
@@ -28,10 +29,8 @@ detects the language too.)
 
 ## Free but powerful
 
-All of this is $0:
+All of this is $0 and fully offline:
 
-- **Brain (cloud, free, no card):** Google **Gemini** (AI Studio, ~1500 req/day),
-  **Groq** (Llama 3.3 70B, fast), and others. Get a key in a minute.
 - **Brain (on-device, free):** an embedded **llama.cpp** engine loads a **GGUF
   model you pick from the built-in manager** — a ladder from *Feather* (0.5B,
   runs on a modest phone) to *Heavy* (7B, flagships). TARS reads the device RAM
@@ -49,15 +48,16 @@ All of this is $0:
 Needs only Python 3.8+ (standard library — no pip installs for the brain).
 
 ```bash
-cd tars
-cp .env.example .env        # then put a free key in it (see links below)
 python -m tars
 ```
 
-Get a free key (no credit card):
-- Gemini: https://aistudio.google.com/apikey  → `GEMINI_API_KEY`
-- Groq:   https://console.groq.com/keys       → `GROQ_API_KEY`
-- or run `ollama serve` locally for full offline.
+Out of the box this runs on the offline brain (in-character, but not a real
+mind). For full thinking on a desktop, run a local engine and point TARS at it:
+- `ollama serve` (then `ollama pull qwen2.5:3b`), or
+- a llama.cpp `llama-server` on `127.0.0.1:8080`.
+
+On Android the app does this for you — tap **Brain** to download the GGUF that
+fits your phone and the embedded `llama-server` starts automatically.
 
 In the chat:
 ```

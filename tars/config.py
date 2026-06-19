@@ -9,7 +9,7 @@ import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 
 def _default_memory_path() -> str:
@@ -56,10 +56,6 @@ class Personality:
 class Settings:
     personality: Personality
     brain_order: List[str]
-    gemini_key: Optional[str]
-    gemini_model: str
-    groq_key: Optional[str]
-    groq_model: str
     local_url: str
     local_model: str
     ollama_url: str
@@ -77,19 +73,18 @@ def load_settings() -> Settings:
         sarcasm=_int("TARS_SARCASM", 30),
         name=os.environ.get("TARS_NAME", "TARS"),
     )
+    # On-device llama.cpp model first; the scripted offline brain is the safety
+    # net. (Ollama stays available for anyone running a desktop server, but it's
+    # not in the default chain — a phone runs the embedded engine.)
     brain_order = [
         b.strip()
-        for b in os.environ.get("TARS_BRAIN_ORDER", "local,ollama,offline").split(",")
+        for b in os.environ.get("TARS_BRAIN_ORDER", "local,offline").split(",")
         if b.strip()
     ]
     memory_path = Path(os.environ.get("TARS_MEMORY") or _default_memory_path())
     return Settings(
         personality=personality,
         brain_order=brain_order,
-        gemini_key=os.environ.get("GEMINI_API_KEY") or None,
-        gemini_model=os.environ.get("GEMINI_MODEL", "gemini-2.0-flash"),
-        groq_key=os.environ.get("GROQ_API_KEY") or None,
-        groq_model=os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
         local_url=os.environ.get("TARS_LOCAL_URL", "http://127.0.0.1:8080"),
         local_model=os.environ.get("TARS_LOCAL_MODEL", "local"),
         ollama_url=os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"),

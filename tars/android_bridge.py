@@ -26,25 +26,6 @@ def init(data_dir: str) -> bool:
     return True
 
 
-def set_keys(gemini: str = "", groq: str = "") -> str:
-    """Apply free cloud API keys from the app's settings and rebuild the brain so
-    the smart cloud models (Gemini/Groq) come online. Returns a comma-separated
-    list of the brains now available, so the UI can confirm."""
-    global _tars
-    if gemini.strip():
-        os.environ["GEMINI_API_KEY"] = gemini.strip()
-    else:
-        os.environ.pop("GEMINI_API_KEY", None)
-    if groq.strip():
-        os.environ["GROQ_API_KEY"] = groq.strip()
-    else:
-        os.environ.pop("GROQ_API_KEY", None)
-    from .config import load_settings
-    from .core import Tars
-    _tars = Tars(load_settings())
-    return ",".join(b.name for b in _tars.brain.brains if b.available())
-
-
 def terminal(line: str) -> str:
     """Run one terminal command (shell, or 'py <code>' for Python) in a session
     rooted at the app's data dir. Backs the manual terminal now and the agentic
@@ -131,7 +112,7 @@ def last_brain_report() -> str:
 
 def recommended_model() -> str:
     """The model the device should run, as 'id|filename|url|size_mb', or '' if
-    nothing fits (then TARS leans on cloud + the offline brain). The Android
+    nothing fits (then TARS falls back to the scripted offline brain). The Android
     side downloads this and points the embedded llama.cpp server at it."""
     from . import models
     spec = models.recommend()
@@ -147,7 +128,7 @@ def diagnostics() -> str:
     pick = models.recommend(ram)
     lines = [
         "device RAM: {}".format("{} MB".format(ram) if ram else "unknown"),
-        "recommended local model: {}".format(pick.id if pick else "none (cloud + offline brain)"),
+        "recommended local model: {}".format(pick.id if pick else "none (offline brain)"),
     ]
     if _tars is not None:
         order = ",".join(b.name for b in _tars.brain.brains)

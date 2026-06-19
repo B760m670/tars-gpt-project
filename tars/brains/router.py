@@ -1,7 +1,7 @@
 """The hybrid brain: try each driver in order, fall back on failure.
 
-This is what makes TARS feel like one mind that thinks "outside" (free cloud)
-when online and "inside" (local model) when offline.
+This is what lets TARS think with the on-device llama.cpp model when it's loaded,
+and still answer in character (the scripted offline brain) when it isn't.
 """
 from __future__ import annotations
 
@@ -37,6 +37,6 @@ class BrainRouter(Brain):
         if self.last_errors:
             raise BrainError("no brain could answer -> " + " | ".join(self.last_errors))
         raise BrainError(
-            "no brain available. Set GEMINI_API_KEY or GROQ_API_KEY (free, no "
-            "card), or run Ollama locally."
+            "no brain available. Tap 'Brain' to download the on-device model, "
+            "or run a llama.cpp/Ollama server."
         )

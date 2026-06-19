@@ -100,33 +100,25 @@ jobs:
             https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.0/sherpa-onnx-1.12.0.aar
           ls -la android/app/libs
 
-      - name: Build both APKs (Lite + Full)
+      - name: Build debug APK
         # versionCode = run number so every build is "newer"; the in-app updater
         # compares against this.
         run: |
-          gradle -p android assembleLiteDebug assembleFullDebug --no-daemon --stacktrace \
+          gradle -p android assembleDebug --no-daemon --stacktrace \
             -PversionCode=${{ github.run_number }} \
             -PversionName=b${{ github.run_number }}
-          ls -la android/app/build/outputs/apk/lite/debug android/app/build/outputs/apk/full/debug
 
-      - name: Write version markers
-        run: |
-          echo "${{ github.run_number }}" > version-lite.txt
-          echo "${{ github.run_number }}" > version-full.txt
+      - name: Write version marker
+        run: echo "${{ github.run_number }}" > version.txt
 
-      - name: Upload APK artifacts
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tars-apks
-          path: |
-            android/app/build/outputs/apk/lite/debug/app-lite-debug.apk
-            android/app/build/outputs/apk/full/debug/app-full-debug.apk
+          name: tars-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-      # Publish a rolling pre-release with BOTH APKs + per-flavor version markers,
-      # so the user picks Lite (Android 5+) or Full (Android 8+) and the in-app
-      # updater finds the latest build for its own flavor.
-      - name: Publish APKs to the rolling "latest" release
+      - name: Publish APK to the rolling "latest" release
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/import-tars-folder-m8wylg'
         uses: softprops/action-gh-release@v2
         with:
@@ -134,7 +126,5 @@ jobs:
           name: TARS (latest build)
           prerelease: true
           files: |
-            android/app/build/outputs/apk/lite/debug/app-lite-debug.apk
-            android/app/build/outputs/apk/full/debug/app-full-debug.apk
-            version-lite.txt
-            version-full.txt
+            android/app/build/outputs/apk/debug/app-debug.apk
+            version.txt
