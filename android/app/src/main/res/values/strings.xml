@@ -3,13 +3,9 @@
     <string name="app_name">TARS</string>
     <string name="send">Send</string>
     <string name="brain">Brain</string>
-    <string name="terminal">Term</string>
     <string name="voice">Voice</string>
     <string name="muted">Muted</string>
-    <string name="logs">Logs</string>
-    <string name="input_hint">Say something to TARS…</string>
-    <string name="terminal_hint">command, or: py &lt;code&gt;…</string>
-    <string name="run">Run</string>
-    <string name="copy">Copy all</string>
-    <string name="greeting">TARS online. Talk to me — in English or Russian.</string>
+    <string name="copy">Copy log</string>
+    <string name="input_hint">Talk to TARS — or \$ command, py code…</string>
+    <string name="greeting">TARS online. Talk to me in English or Russian — or run \$ shell / py code right here.</string>
 </resources>

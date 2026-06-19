@@ -4,11 +4,9 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.text.method.ScrollingMovementMethod
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -29,28 +27,35 @@ import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
- * Minimal chat UI. The thinking lives in Python (the `tars` package) via
- * Chaquopy; this Activity shuttles text in and replies out, off the UI thread.
- * A Logs button shows diagnostics, and on launch TARS checks for a newer build.
+ * One screen, one stream. You talk to TARS in the same console where his system
+ * log scrolls and where shell/Python commands run — like a Linux terminal with a
+ * character. The thinking lives in Python (the `tars` package) via Chaquopy;
+ * this Activity shuttles text in and replies out, always off the UI thread.
+ *
+ *   plain text   → a message to TARS
+ *   $ <command>  → a shell command in the app sandbox
+ *   py <code>    → a line of Python
+ *   · <line>     → a system log line (brain, voice, updater…)
  */
 class MainActivity : AppCompatActivity() {
 
-    // Fast Python ops only (respond, keys, personality) — kept on one thread so
-    // the shared TARS state is never touched concurrently.
+    // Fast Python ops only (respond, personality) — one thread so the shared TARS
+    // state is never touched concurrently.
     private val worker = Executors.newSingleThreadExecutor()
-    // Heavy, slow work on its OWN threads so it never blocks chat or key-apply
-    // (the 1 GB model download used to stall everything on the worker).
+    // Heavy, slow work on its OWN threads so it never blocks chat (the ~1 GB model
+    // download used to stall everything on the worker).
     private val brainExec = Executors.newSingleThreadExecutor()
     private val termExec = Executors.newSingleThreadExecutor()
     private val voiceExec = Executors.newSingleThreadExecutor()
     private lateinit var bridge: PyObject
 
+    // Full timestamped transcript, kept for "Copy log" even after lines scroll off.
     private val diag = StringBuilder()
     private val clock = SimpleDateFormat("HH:mm:ss", Locale.US)
 
     private val ui = Handler(Looper.getMainLooper())
-    private var logsView: TextView? = null      // non-null while the Logs dialog is open
-    @Volatile private var lastCore = "(loading…)"
+    private lateinit var stream: TextView
+    private lateinit var streamScroll: ScrollView
 
     private lateinit var speaker: Speaker
 
@@ -61,9 +66,24 @@ class MainActivity : AppCompatActivity() {
     private val dials = intArrayOf(75, 90, 70)   // humor, honesty, discretion
     @Volatile private var state = "STANDBY"
 
+    private val cyrillic = Regex("[А-Яа-яЁё]")
+
+    /** Record a system log line: into the transcript AND the live stream (dimmed
+     *  with a "· " marker so it reads apart from the conversation). */
     @Synchronized
     private fun log(line: String) {
         diag.append(clock.format(Date())).append("  ").append(line).append('\n')
+        appendLine("· $line")
+    }
+
+    /** Append a raw line to the on-screen stream and keep it pinned to the bottom.
+     *  Safe to call from any thread. */
+    private fun appendLine(text: String) {
+        ui.post {
+            if (!::stream.isInitialized) return@post
+            stream.append("\n$text")
+            streamScroll.post { streamScroll.fullScroll(ScrollView.FOCUS_DOWN) }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,12 +92,10 @@ class MainActivity : AppCompatActivity() {
 
         val input = findViewById<EditText>(R.id.input)
         val send = findViewById<Button>(R.id.send)
-        val logsBtn = findViewById<Button>(R.id.logs)
         val brainBtn = findViewById<Button>(R.id.brain)
-        val terminalBtn = findViewById<Button>(R.id.terminal)
         val voiceBtn = findViewById<Button>(R.id.voice)
-        val log = findViewById<TextView>(R.id.log)
-        val scroll = findViewById<ScrollView>(R.id.scroll)
+        stream = findViewById(R.id.log)
+        streamScroll = findViewById(R.id.scroll)
 
         statusView = findViewById(R.id.status)
         cueView = findViewById(R.id.cue)
@@ -86,10 +104,8 @@ class MainActivity : AppCompatActivity() {
 
         speaker = Speaker(this) { line -> log(line) }
 
-        log.text = getString(R.string.greeting)
-        logsBtn.setOnClickListener { showLogs() }
+        stream.text = getString(R.string.greeting)
         brainBtn.setOnClickListener { setUpLocalBrain() }
-        terminalBtn.setOnClickListener { showTerminal() }
         voiceBtn.setOnClickListener {
             speaker.enabled = !speaker.enabled
             if (!speaker.enabled) { speaker.stop(); PiperVoice.stop() }
@@ -98,6 +114,7 @@ class MainActivity : AppCompatActivity() {
         }
         voiceBtn.setOnLongClickListener { installPiperVoice(); true }
         log("voice: long-press Voice to install the deep TARS voices, RU + EN (~60 MB)")
+        log("console: type to talk, or '\$ cmd' for shell, 'py code' for Python")
 
         worker.execute {
             try {
@@ -108,52 +125,67 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 log("core: failed to start — ${e.message}")
             }
-            // If a local model is already downloaded, bring the on-device brain
-            // up automatically so TARS thinks offline from launch.
             try {
                 val p = bridge.callAttr("get_personality").toString().split("|")
                 dials[0] = p[0].toInt(); dials[1] = p[1].toInt(); dials[2] = p[2].toInt()
                 setState(state)
             } catch (e: Exception) { /* keep defaults */ }
+            // If a local model is already downloaded, bring the on-device brain up
+            // automatically so TARS thinks on-device from launch.
             brainExec.execute { autoStartLocalBrain() }
-            // Load the Piper voice if it's already installed.
             PiperVoice.load(this) { line -> log(line) }
-            // Check for a newer build in the background.
             Updater.checkAndPrompt(this) { line -> log(line) }
         }
 
-        send.setOnClickListener {
-            val text = input.text.toString().trim()
-            if (text.isEmpty()) return@setOnClickListener
-            input.setText("")
-            log.append("\n\nyou> $text")
-            log("chat: sent \"${text.take(40)}\"")
-            scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
-            setState("THINKING")
+        send.setOnClickListener { submit(input) }
+        input.setOnEditorActionListener { _, _, _ -> submit(input); true }
+    }
 
-            worker.execute {
-                val reply = try {
-                    bridge.callAttr("respond", text).toString()
-                } catch (e: Exception) {
-                    log("chat error: ${e.message}")
-                    "[error] ${e.message}"
-                }
-                val report = try { bridge.callAttr("last_brain_report").toString() } catch (e: Exception) { "?" }
-                log("chat: $report")
-                runOnUiThread {
-                    log.append("\nTARS> $reply")
-                    scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
-                    if (!reply.startsWith("[error]")) speakReply(reply)
-                    setState("TALKING")
-                    val ms = (reply.length * 55L).coerceIn(1500L, 12000L)
-                    ui.postDelayed({ if (state == "TALKING") setState("STANDBY") }, ms)
-                }
+    /** Route one line from the input box: a shell/Python command, or a message to
+     *  TARS. Everything echoes into the single stream. */
+    private fun submit(input: EditText) {
+        val text = input.text.toString().trim()
+        if (text.isEmpty()) return
+        input.setText("")
+
+        if (text.startsWith("$") || text.startsWith("py ")) {
+            val cmd = if (text.startsWith("$")) text.removePrefix("$").trim() else text
+            if (cmd.isEmpty()) return
+            appendLine("\n$ $cmd")
+            log("console: \$ $cmd")
+            termExec.execute {
+                val out = try {
+                    bridge.callAttr("terminal", cmd).toString()
+                } catch (e: Exception) { "error: ${e.message}" }
+                appendLine(out.trimEnd())
+            }
+            return
+        }
+
+        appendLine("\nyou> $text")
+        log("chat: sent \"${text.take(40)}\"")
+        setState("THINKING")
+        worker.execute {
+            val reply = try {
+                bridge.callAttr("respond", text).toString()
+            } catch (e: Exception) {
+                log("chat error: ${e.message}")
+                "[error] ${e.message}"
+            }
+            val report = try { bridge.callAttr("last_brain_report").toString() } catch (e: Exception) { "?" }
+            log("chat: $report")
+            runOnUiThread {
+                appendLine("TARS> $reply")
+                if (!reply.startsWith("[error]")) speakReply(reply)
+                setState("TALKING")
+                val ms = (reply.length * 55L).coerceIn(1500L, 12000L)
+                ui.postDelayed({ if (state == "TALKING") setState("STANDBY") }, ms)
             }
         }
     }
 
     /** Tapped by the user: download the recommended model (once) and start the
-     *  on-device llama.cpp brain. Runs on the worker thread; the download is big. */
+     *  on-device llama.cpp brain. The download is big, so it runs off the worker. */
     private fun setUpLocalBrain() {
         log("brain: setting up on-device engine…")
         brainExec.execute {
@@ -164,7 +196,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 val info = bridge.callAttr("recommended_model").toString()
                 if (info.isBlank()) {
-                    log("brain: this device's RAM is too low for a local model — cloud/offline only.")
+                    log("brain: this device's RAM is too low for a local model — offline brain only.")
                     return@execute
                 }
                 val parts = info.split("|")           // id|filename|url|size_mb
@@ -198,79 +230,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Open the logs window IMMEDIATELY (on the UI thread, never queued behind a
-     *  download or a reply) and keep it refreshing live so downloads and actions
-     *  show up as they happen. */
-    private fun showLogs() {
-        log("logs: opened")
-        val view = TextView(this).apply {
-            textSize = 12f
-            typeface = Typeface.MONOSPACE
-            setPadding(40, 30, 40, 20)
-            movementMethod = ScrollingMovementMethod()
-            setTextIsSelectable(true)
-        }
-        logsView = view
-        refreshLogsView()
-
-        val copyBtn = Button(this).apply { text = getString(R.string.copy) }
-        copyBtn.setOnClickListener {
-            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            cm.setPrimaryClip(ClipData.newPlainText("TARS logs", currentLogBody()))
-            log("logs: copied to clipboard")
-        }
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(
-                ScrollView(this@MainActivity).apply { addView(view) },
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
-            )
-            addView(copyBtn)
-        }
-
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("TARS — logs")
-            .setView(root)
-            .setPositiveButton("Close", null)
-            .create()
-        dialog.setOnDismissListener { logsView = null }
-        dialog.show()
-
-        // Live refresh while the dialog is open. Only rewrite the text when it
-        // actually changed, so a long-press text selection isn't wiped every tick.
-        ui.postDelayed(object : Runnable {
-            override fun run() {
-                if (logsView !== view) return   // dialog closed (or replaced)
-                refreshLogsView()
-                ui.postDelayed(this, 600)
-            }
-        }, 600)
-
-        // Fetch core diagnostics without blocking the window (own thread, not the
-        // shared worker, so it shows even mid-download).
-        Thread {
-            lastCore = try {
-                if (::bridge.isInitialized) bridge.callAttr("diagnostics").toString()
-                else "(core still starting…)"
-            } catch (e: Exception) {
-                "diagnostics unavailable: ${e.message}"
-            }
-        }.start()
-    }
-
-    private fun currentLogBody(): String =
-        synchronized(this) { "--- core ---\n$lastCore\n\n--- log ---\n$diag" }
-
-    private fun refreshLogsView() {
-        val body = currentLogBody()
-        val view = logsView ?: return
-        if (view.text?.toString() != body) view.text = body   // avoid wiping a selection
-    }
-
-    /** A TARS terminal: type a shell command, or `py <code>` for Python. Runs in
-     *  the app's sandbox (no root) via the Python bridge. */
-    private val cyrillic = Regex("[А-Яа-яЁё]")
-
     /** Speak a reply with the deep Piper voice for its language; fall back to
      *  system TTS if that voice isn't installed. */
     private fun speakReply(text: String) {
@@ -301,12 +260,38 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(0, 1, 0, "Personality")
+        menu.add(0, 2, 1, "Diagnostics")
+        menu.add(0, 3, 2, getString(R.string.copy))
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == 1) { showDials(); return true }
+        when (item.itemId) {
+            1 -> { showDials(); return true }
+            2 -> { showDiagnostics(); return true }
+            3 -> { copyLog(); return true }
+        }
         return super.onOptionsItemSelected(item)
+    }
+
+    /** Pull a fresh core status report into the stream (own thread so it shows
+     *  even mid-download). */
+    private fun showDiagnostics() {
+        log("diagnostics: requested")
+        Thread {
+            val report = try {
+                if (::bridge.isInitialized) bridge.callAttr("diagnostics").toString()
+                else "(core still starting…)"
+            } catch (e: Exception) { "diagnostics unavailable: ${e.message}" }
+            appendLine("\n--- diagnostics ---\n$report\n-------------------")
+        }.start()
+    }
+
+    private fun copyLog() {
+        val body = synchronized(this) { diag.toString() }
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("TARS log", body))
+        log("log: copied to clipboard")
     }
 
     /** The TARS "settings bench": live sliders for Humor / Honesty / Discretion /
@@ -403,64 +388,8 @@ class MainActivity : AppCompatActivity() {
         for (b in vuBars) { b.pivotY = b.height.toFloat(); b.scaleY = 0.08f }
     }
 
-    private fun showTerminal() {
-        log("terminal: opened")
-        val output = TextView(this).apply {
-            textSize = 12f
-            typeface = Typeface.MONOSPACE
-            setTextIsSelectable(true)
-            setPadding(24, 16, 24, 16)
-            text = "TARS terminal — sandbox shell. Type a command, or 'py <code>' for Python.\n"
-        }
-        val scroll = ScrollView(this).apply { addView(output) }
-        val input = EditText(this).apply {
-            hint = getString(R.string.terminal_hint)
-            setSingleLine(true)
-        }
-        val runBtn = Button(this).apply { text = getString(R.string.run) }
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            addView(input, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(runBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        }
-        val rootView = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-            addView(row)
-        }
-
-        fun submit() {
-            val cmd = input.text.toString().trim()
-            if (cmd.isEmpty()) return
-            input.setText("")
-            output.append("\n$ $cmd\n")
-            log("terminal: $ $cmd")
-            scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
-            termExec.execute {
-                val out = try {
-                    bridge.callAttr("terminal", cmd).toString()
-                } catch (e: Exception) {
-                    "error: ${e.message}"
-                }
-                runOnUiThread {
-                    output.append(out.trimEnd() + "\n")
-                    scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
-                }
-            }
-        }
-        runBtn.setOnClickListener { submit() }
-        input.setOnEditorActionListener { _, _, _ -> submit(); true }
-
-        AlertDialog.Builder(this)
-            .setTitle("TARS — terminal")
-            .setView(rootView)
-            .setPositiveButton("Close", null)
-            .show()
-    }
-
     override fun onDestroy() {
         ui.removeCallbacksAndMessages(null)
-        logsView = null
         if (::speaker.isInitialized) speaker.shutdown()
         PiperVoice.stop()
         LlamaServer.stop()
