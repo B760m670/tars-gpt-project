@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- TARS listens for "Hey TARS" and transcribes speech on-device. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- TARS sees through the camera (back/front) and comments on what he sees. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <!-- Let TARS install its own downloaded update (Android 8+). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 

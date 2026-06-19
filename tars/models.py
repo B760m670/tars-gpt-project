@@ -29,51 +29,54 @@ _HEADROOM = 0.7
 class ModelSpec:
     id: str
     label: str           # human name, light -> heavy
-    params: str          # e.g. "0.5B"
-    file_mb: int         # download size (Q4_K_M, approx)
+    params: str          # e.g. "3B"
+    file_mb: int         # download size of the main GGUF (Q4_K_M, approx)
     min_ram_mb: int      # working-set RAM the model needs at runtime
     repo: str            # Hugging Face repo
     filename: str        # GGUF file inside the repo
     note: str
+    mmproj_filename: str = ""   # vision projector GGUF (multimodal models only)
+    mmproj_mb: int = 0          # its download size
 
     @property
     def url(self) -> str:
         return "https://huggingface.co/{}/resolve/main/{}".format(self.repo, self.filename)
 
+    @property
+    def vision(self) -> bool:
+        return bool(self.mmproj_filename)
 
-# Qwen3-Instruct: the current generation (newer than Qwen2.5), strong and
-# genuinely multilingual (good Russian), Apache-2.0, official GGUFs. A clean
-# ladder from "runs almost anywhere" to "flagship only". Thinking mode is turned
-# OFF for TARS (see LocalBrain) — his replies are spoken, not internal monologue.
+    @property
+    def mmproj_url(self) -> str:
+        if not self.mmproj_filename:
+            return ""
+        return "https://huggingface.co/{}/resolve/main/{}".format(self.repo, self.mmproj_filename)
+
+
+# Qwen2.5-VL-Instruct: a multimodal mind — it SEES and talks. TARS is a voice +
+# vision robot, not a text chatbot, so his brain is vision-capable by default:
+# the same model handles speech (transcribed by the ears) and what the camera
+# sees, and answers out loud. Genuinely multilingual (good Russian), Apache-2.0,
+# with mtmd-ready GGUFs (main model + an mmproj vision projector) from ggml-org.
 CATALOG: List[ModelSpec] = [
     ModelSpec(
-        id="qwen3-0.6b", label="Feather", params="0.6B",
-        file_mb=500, min_ram_mb=1200,
-        repo="Qwen/Qwen3-0.6B-GGUF",
-        filename="Qwen3-0.6B-Q4_K_M.gguf",
-        note="Lightest. A pulse on a modest phone — terse, but his own words.",
+        id="qwen2.5-vl-3b", label="Standard", params="3B",
+        file_mb=2200, min_ram_mb=3700,
+        repo="ggml-org/Qwen2.5-VL-3B-Instruct-GGUF",
+        filename="Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
+        mmproj_filename="mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
+        mmproj_mb=1300,
+        note="TARS's eyes + voice on a 6 GB phone (Galaxy A32-class). Sees through "
+             "the camera and talks — one multimodal mind.",
     ),
     ModelSpec(
-        id="qwen3-1.7b", label="Light", params="1.7B",
-        file_mb=1100, min_ram_mb=2400,
-        repo="Qwen/Qwen3-1.7B-GGUF",
-        filename="Qwen3-1.7B-Q4_K_M.gguf",
-        note="A good fit for a normal mid-range phone.",
-    ),
-    ModelSpec(
-        id="qwen3-4b", label="Standard", params="4B",
-        file_mb=2500, min_ram_mb=3700,
-        repo="Qwen/Qwen3-4B-GGUF",
-        filename="Qwen3-4B-Q4_K_M.gguf",
-        note="The sweet spot for a 6 GB phone (Galaxy A32-class). Noticeably "
-             "sharper in character — TARS's recommended mind.",
-    ),
-    ModelSpec(
-        id="qwen3-8b", label="Heavy", params="8B",
-        file_mb=5000, min_ram_mb=8000,
-        repo="Qwen/Qwen3-8B-GGUF",
-        filename="Qwen3-8B-Q4_K_M.gguf",
-        note="A real on-device mind. Flagships with 12 GB+ only.",
+        id="qwen2.5-vl-7b", label="Heavy", params="7B",
+        file_mb=4700, min_ram_mb=8000,
+        repo="ggml-org/Qwen2.5-VL-7B-Instruct-GGUF",
+        filename="Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
+        mmproj_filename="mmproj-Qwen2.5-VL-7B-Instruct-f16.gguf",
+        mmproj_mb=1400,
+        note="A sharper-eyed mind. Flagships with 12 GB+ only.",
     ),
 ]
 

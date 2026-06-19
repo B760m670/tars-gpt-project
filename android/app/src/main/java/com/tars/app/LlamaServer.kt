@@ -103,8 +103,10 @@ object LlamaServer {
         }
     }
 
-    /** Start the server against a downloaded model (no-op if already running). */
-    fun start(ctx: Context, model: File, log: (String) -> Unit) {
+    /** Start the server against a downloaded model (no-op if already running).
+     *  If [mmproj] is given (a vision projector), the model serves images too —
+     *  TARS can see. */
+    fun start(ctx: Context, model: File, mmproj: File? = null, log: (String) -> Unit) {
         if (isRunning()) return
         val bin = binary(ctx)
         if (!bin.exists()) {
@@ -116,23 +118,27 @@ object LlamaServer {
             return
         }
         val threads = Runtime.getRuntime().availableProcessors().coerceAtLeast(2)
-        val pb = ProcessBuilder(
+        val args = arrayListOf(
             bin.absolutePath,
             "-m", model.absolutePath,
             "--host", "127.0.0.1",
             "--port", "8080",
             "-c", "4096",
             "-t", threads.toString(),
-            // Use the model's own chat template so Qwen3's "/no_think" switch is
+            // Use the model's own chat template so the model-specific switches are
             // honoured (TARS speaks, he doesn't think out loud).
             "--jinja",
             // Flash attention + an 8-bit KV cache roughly halve the memory the
-            // context uses, so the 4B model fits comfortably on a 6 GB phone and
-            // runs a little faster.
+            // context uses, so the model fits on a 6 GB phone and runs a bit faster.
             "-fa",
             "--cache-type-k", "q8_0",
             "--cache-type-v", "q8_0"
         )
+        if (mmproj != null && mmproj.exists()) {
+            args.add("--mmproj"); args.add(mmproj.absolutePath)
+            log("brain: vision projector loaded — TARS can see")
+        }
+        val pb = ProcessBuilder(args)
         pb.redirectErrorStream(true)
         pb.redirectOutput(logFile(ctx))
         val proc = pb.start()

@@ -38,21 +38,21 @@ class OfflineBrainTests(unittest.TestCase):
 
 
 class ModelManagerTests(unittest.TestCase):
-    def test_weak_android5_phone_gets_nothing(self):
-        # ~1 GB RAM (Android 5 class): even the lightest model shouldn't fit.
+    def test_small_phone_gets_nothing(self):
+        # The vision brain needs ~6 GB; smaller phones fall back to the offline brain.
         self.assertIsNone(models.recommend(1000))
+        self.assertIsNone(models.recommend(4000))
 
-    def test_midrange_phone_gets_a_light_model(self):
-        pick = models.recommend(4000)
-        self.assertIsNotNone(pick)
-        self.assertIn(pick.id, {"qwen3-0.6b", "qwen3-1.7b"})
+    def test_galaxy_a32_6gb_gets_the_vl_3b(self):
+        # The target device: ~6 GB RAM (reports ~5500 MB) lands on Qwen2.5-VL-3B.
+        self.assertEqual(models.recommend(5500).id, "qwen2.5-vl-3b")
 
-    def test_galaxy_a32_6gb_gets_the_4b(self):
-        # The target device: ~6 GB RAM (reports ~5500 MB) should land on Qwen3-4B.
-        self.assertEqual(models.recommend(5500).id, "qwen3-4b")
+    def test_recommended_brain_can_see(self):
+        # TARS is a vision robot — the recommended model is multimodal.
+        self.assertTrue(models.recommend(5500).vision)
 
     def test_flagship_gets_the_heaviest(self):
-        self.assertEqual(models.recommend(16000).id, "qwen3-8b")
+        self.assertEqual(models.recommend(16000).id, "qwen2.5-vl-7b")
 
     def test_recommendation_is_monotonic(self):
         # More RAM never recommends a smaller model.

@@ -98,6 +98,7 @@ class MainActivity : AppCompatActivity() {
         val brainBtn = findViewById<Button>(R.id.brain)
         val voiceBtn = findViewById<Button>(R.id.voice)
         val micBtn = findViewById<Button>(R.id.mic)
+        val eyeBtn = findViewById<Button>(R.id.eye)
         stream = findViewById(R.id.log)
         streamScroll = findViewById(R.id.scroll)
 
@@ -120,8 +121,11 @@ class MainActivity : AppCompatActivity() {
         voiceBtn.setOnLongClickListener { installPiperVoice(); true }
         micBtn.setOnClickListener { toggleEars() }
         micBtn.setOnLongClickListener { installEars(); true }
+        eyeBtn.setOnClickListener { toggleVision() }
+        eyeBtn.setOnLongClickListener { Vision.switchLens(this) { l -> log(l) }; true }
         log("voice: long-press Voice to install the deep TARS voices, RU + EN (~60 MB)")
         log("ears: long-press Mic to install speech recognition, then say \"Hey TARS\"")
+        log("vision: tap Eye to let TARS see; long-press Eye to flip camera")
         log("console: type to talk, or '\$ cmd' for shell, 'py code' for Python")
 
         worker.execute {
@@ -236,8 +240,16 @@ class MainActivity : AppCompatActivity() {
             }
             return
         }
+        // If he's watching and you ask about what he sees, answer from the camera.
+        if (Vision.isOn() && visionQuestion.containsMatchIn(command)) {
+            doGlance(command)
+            return
+        }
         converse(command)
     }
+
+    private val visionQuestion =
+        Regex("(?i)(виж|вид|смотр|камер|перед тобой|see|look|camera|in front)")
 
     private fun hasMicPermission(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
@@ -277,13 +289,75 @@ class MainActivity : AppCompatActivity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQ_MIC) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+        val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+        when (requestCode) {
+            REQ_MIC -> if (granted) {
                 log("ears: mic permission granted")
                 if (Ears.isReady()) Ears.start(this, { heard -> onHeard(heard) }) { line -> log(line) }
                 else installEars()
-            } else {
-                log("ears: mic permission denied — voice input off")
+            } else log("ears: mic permission denied — voice input off")
+            REQ_CAM -> if (granted) { log("vision: camera permission granted"); startVision() }
+            else log("vision: camera permission denied — TARS can't see")
+        }
+    }
+
+    // ---- Vision: TARS sees through the camera and comments on what he sees ----
+
+    @Volatile private var visionOn = false
+    private val glanceEvery = 30_000L   // a "glance" at most this often
+
+    private fun hasCamPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun toggleVision() {
+        if (Vision.isOn()) {
+            visionOn = false
+            ui.removeCallbacks(glanceTick)
+            Vision.stop(this) { l -> log(l) }
+            return
+        }
+        if (!hasCamPermission()) { requestPermissions(arrayOf(Manifest.permission.CAMERA), REQ_CAM); return }
+        if (!LlamaServer.isRunning()) {
+            log("vision: start the brain first (tap Brain) — the eyes need the vision model")
+            return
+        }
+        startVision()
+    }
+
+    private fun startVision() {
+        Vision.start(this) { l -> log(l) }
+        visionOn = true
+        ui.removeCallbacks(glanceTick)
+        ui.postDelayed(glanceTick, 4000)   // first look shortly after the camera warms up
+    }
+
+    /** Periodic unprompted "glance": TARS looks and comments only if he feels like
+     *  it (the model answers "…" when nothing's worth a remark). */
+    private val glanceTick = object : Runnable {
+        override fun run() {
+            if (!visionOn) return
+            doGlance("Коротко прокомментируй, что видишь, в характере TARS. " +
+                "Если ничего интересного — ответь только «…».")
+            ui.postDelayed(this, glanceEvery)
+        }
+    }
+
+    /** Ask the vision model about the current frame; speak the comment if any. */
+    private fun doGlance(ask: String) {
+        if (!Vision.isOn()) return
+        voiceExec.execute {
+            val sys = try { bridge.callAttr("system_prompt").toString() } catch (e: Exception) { "You are TARS." }
+            val comment = Vision.glance(sys, ask) { l -> log(l) }
+            if (comment.isNotBlank()) {
+                runOnUiThread {
+                    appendLine("TARS 👁 $comment")
+                    speakReply(comment)
+                    setState("TALKING")
+                    lastReplyAt = System.currentTimeMillis()
+                    val ms = (comment.length * 55L).coerceIn(1500L, 12000L)
+                    ui.postDelayed({ if (state == "TALKING") setState("STANDBY") }, ms)
+                }
             }
         }
     }
@@ -303,17 +377,29 @@ class MainActivity : AppCompatActivity() {
                     log("brain: this device's RAM is too low for a local model — offline brain only.")
                     return@execute
                 }
-                val parts = info.split("|")           // id|filename|url|size_mb
-                val filename = parts[1]
-                val url = parts[2]
-                val model = java.io.File(LlamaServer.modelsDir(this), filename)
+                // id|filename|url|size_mb|mmproj_filename|mmproj_url|mmproj_mb
+                val parts = info.split("|")
+                val model = java.io.File(LlamaServer.modelsDir(this), parts[1])
                 log("brain: model = ${parts[0]} (~${parts.getOrElse(3) { "?" }} MB)")
-                LlamaServer.downloadModel(url, model) { line -> log(line) }
-                LlamaServer.start(this, model) { line -> log(line) }
+                LlamaServer.downloadModel(parts[2], model) { line -> log(line) }
+                val mmproj = downloadMmprojIfAny(parts)
+                LlamaServer.start(this, model, mmproj) { line -> log(line) }
             } catch (e: Exception) {
                 log("brain: setup failed — ${e.message}")
             }
         }
+    }
+
+    /** Download the vision projector (mmproj) for a multimodal model, if the
+     *  recommendation includes one. Returns the file, or null for a text model. */
+    private fun downloadMmprojIfAny(parts: List<String>): java.io.File? {
+        val name = parts.getOrElse(4) { "" }
+        val url = parts.getOrElse(5) { "" }
+        if (name.isBlank() || url.isBlank()) return null
+        val f = java.io.File(LlamaServer.modelsDir(this), name)
+        log("brain: vision projector ~${parts.getOrElse(6) { "?" }} MB")
+        LlamaServer.downloadModel(url, f) { line -> log(line) }
+        return f
     }
 
     /** Start the local brain only if its model is already downloaded. */
@@ -322,10 +408,13 @@ class MainActivity : AppCompatActivity() {
             if (!LlamaServer.isSupported(this)) return
             val info = bridge.callAttr("recommended_model").toString()
             if (info.isBlank()) return
-            val filename = info.split("|")[1]
-            val model = java.io.File(LlamaServer.modelsDir(this), filename)
+            val parts = info.split("|")
+            val model = java.io.File(LlamaServer.modelsDir(this), parts[1])
             if (model.exists()) {
-                LlamaServer.start(this, model) { line -> log(line) }
+                val mmprojName = parts.getOrElse(4) { "" }
+                val mmproj = if (mmprojName.isNotBlank())
+                    java.io.File(LlamaServer.modelsDir(this), mmprojName).takeIf { it.exists() } else null
+                LlamaServer.start(this, model, mmproj) { line -> log(line) }
             } else {
                 log("brain: tap 'Brain' to download the on-device model (one time).")
             }
@@ -539,6 +628,7 @@ class MainActivity : AppCompatActivity() {
         ui.removeCallbacksAndMessages(null)
         if (::speaker.isInitialized) speaker.shutdown()
         Ears.stop()
+        if (Vision.isOn()) Vision.stop(this) { }
         PiperVoice.stop()
         LlamaServer.stop()
         worker.shutdownNow()
@@ -550,5 +640,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val REQ_MIC = 101
+        private const val REQ_CAM = 102
     }
 }

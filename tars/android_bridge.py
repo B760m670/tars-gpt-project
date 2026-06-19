@@ -127,14 +127,30 @@ def last_brain_report() -> str:
 
 
 def recommended_model() -> str:
-    """The model the device should run, as 'id|filename|url|size_mb', or '' if
-    nothing fits (then TARS falls back to the scripted offline brain). The Android
-    side downloads this and points the embedded llama.cpp server at it."""
+    """The model the device should run, as
+    'id|filename|url|size_mb|mmproj_filename|mmproj_url|mmproj_mb', or '' if nothing
+    fits (then TARS falls back to the scripted offline brain). The mmproj fields are
+    blank for text-only models. The Android side downloads these and points the
+    embedded llama.cpp server at them."""
     from . import models
     spec = models.recommend()
     if spec is None:
         return ""
-    return "|".join([spec.id, spec.filename, spec.url, str(spec.file_mb)])
+    return "|".join([
+        spec.id, spec.filename, spec.url, str(spec.file_mb),
+        spec.mmproj_filename, spec.mmproj_url, str(spec.mmproj_mb),
+    ])
+
+
+def system_prompt() -> str:
+    """TARS's current character prompt (dials + memory), so the Kotlin vision path
+    can ask the multimodal model to comment on what the camera sees *in character*
+    without going through the text chat loop."""
+    from .personality import build_system_prompt
+    if _tars is None:
+        from .config import Personality
+        return build_system_prompt(Personality())
+    return build_system_prompt(_tars.settings.personality, _tars.memory.facts_text())
 
 
 def diagnostics() -> str:
