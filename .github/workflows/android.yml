@@ -72,7 +72,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish APK to the rolling "latest" release
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/import-tars-folder-m8wylg'
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/import-tars-folder-m8wylg' || github.ref == 'refs/heads/claude/russian-greeting-nesa0h'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
