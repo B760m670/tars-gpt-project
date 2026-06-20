@@ -14,9 +14,10 @@ android {
 
     defaultConfig {
         applicationId 'com.tars.app'
-        minSdk 28            // Android 9+. The on-device model needs a capable
-                             // modern device anyway; this still covers the target
-                             // Galaxy A32-class phones.
+        minSdk 30            // Android 11+. The target Galaxy A32-class phones ship
+                             // on 11+, and 30 keeps the NDK availability floor high
+                             // enough that the engine's API-30 symbols compile
+                             // cleanly (no -Werror=unguarded-availability).
         versionCode tarsVersionCode
         versionName tarsVersionName
         targetSdk 34

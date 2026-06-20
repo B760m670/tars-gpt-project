@@ -5,33 +5,22 @@
 #define LOG_TAG "tars-llm"
 #endif
 
-#ifndef LOG_MIN_LEVEL
+// NOTE: deliberately NOT using __android_log_is_loggable() — that symbol is only
+// available from API 30, and gating on it breaks the build at minSdk < 30
+// (-Werror=unguarded-availability-new). We just log directly; Android's logd
+// applies its own level filtering.
+
 #if defined(NDEBUG)
-#define LOG_MIN_LEVEL ANDROID_LOG_INFO
-#else
-#define LOG_MIN_LEVEL ANDROID_LOG_VERBOSE
-#endif
-#endif
-
-static inline int ai_should_log(int prio) {
-    return __android_log_is_loggable(prio, LOG_TAG, LOG_MIN_LEVEL);
-}
-
-#if LOG_MIN_LEVEL <= ANDROID_LOG_VERBOSE
-#define LOGv(...) do { if (ai_should_log(ANDROID_LOG_VERBOSE)) __android_log_print(ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__); } while (0)
-#else
 #define LOGv(...) ((void)0)
-#endif
-
-#if LOG_MIN_LEVEL <= ANDROID_LOG_DEBUG
-#define LOGd(...) do { if (ai_should_log(ANDROID_LOG_DEBUG)) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__); } while (0)
-#else
 #define LOGd(...) ((void)0)
+#else
+#define LOGv(...) __android_log_print(ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__)
+#define LOGd(...) __android_log_print(ANDROID_LOG_DEBUG,   LOG_TAG, __VA_ARGS__)
 #endif
 
-#define LOGi(...)   do { if (ai_should_log(ANDROID_LOG_INFO )) __android_log_print(ANDROID_LOG_INFO , LOG_TAG, __VA_ARGS__); } while (0)
-#define LOGw(...)   do { if (ai_should_log(ANDROID_LOG_WARN )) __android_log_print(ANDROID_LOG_WARN , LOG_TAG, __VA_ARGS__); } while (0)
-#define LOGe(...)   do { if (ai_should_log(ANDROID_LOG_ERROR)) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__); } while (0)
+#define LOGi(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
+#define LOGw(...) __android_log_print(ANDROID_LOG_WARN,  LOG_TAG, __VA_ARGS__)
+#define LOGe(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 static inline int android_log_prio_from_ggml(enum ggml_log_level level) {
     switch (level) {
@@ -46,7 +35,5 @@ static inline int android_log_prio_from_ggml(enum ggml_log_level level) {
 static inline void tars_android_log_callback(enum ggml_log_level level,
                                              const char* text,
                                              void* /*user*/) {
-    const int prio = android_log_prio_from_ggml(level);
-    if (!ai_should_log(prio)) return;
-    __android_log_write(prio, LOG_TAG, text);
+    __android_log_write(android_log_prio_from_ggml(level), LOG_TAG, text);
 }
