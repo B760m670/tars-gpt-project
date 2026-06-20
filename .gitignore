@@ -17,6 +17,9 @@ android/app/src/main/python/
 android/app/src/main/jniLibs/
 android/app/libs/
 android/local.properties
+# llama.cpp is cloned (pinned tag) into the cpp dir by CI; never commit it.
+android/app/src/main/cpp/llama.cpp/
+android/app/.cxx/
 *.apk
 .idea/
 *.iml

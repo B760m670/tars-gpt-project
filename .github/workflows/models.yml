@@ -1,0 +1,43 @@
+name: Mirror models to release
+
+# Hosts the on-device GGUF models on THIS repo's "models" release, so the phone
+# downloads them from GitHub (reliable) instead of HuggingFace (whose redirect/
+# CDN caused the "download interrupted (0 MB)" failures on-device). HuggingFace IS
+# reachable from GitHub runners, so we mirror here, once, on demand.
+#
+# Run manually: Actions → "Mirror models to release" → Run workflow.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        model:
+          - repo: Qwen/Qwen3-0.6B-GGUF
+            file: Qwen3-0.6B-Q4_K_M.gguf
+          - repo: Qwen/Qwen3-1.7B-GGUF
+            file: Qwen3-1.7B-Q4_K_M.gguf
+          - repo: Qwen/Qwen3-4B-GGUF
+            file: Qwen3-4B-Q4_K_M.gguf
+    steps:
+      - name: Download ${{ matrix.model.file }} from HuggingFace
+        run: |
+          set -e
+          url="https://huggingface.co/${{ matrix.model.repo }}/resolve/main/${{ matrix.model.file }}?download=true"
+          echo "fetching $url"
+          curl -fL --retry 5 --retry-delay 5 -o "${{ matrix.model.file }}" "$url"
+          ls -lh "${{ matrix.model.file }}"
+
+      - name: Upload to the "models" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: models
+          name: TARS on-device models
+          prerelease: true
+          files: ${{ matrix.model.file }}

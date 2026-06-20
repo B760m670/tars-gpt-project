@@ -3,11 +3,6 @@
     <string name="app_name">TARS</string>
     <string name="send">Send</string>
     <string name="brain">Brain</string>
-    <string name="voice">Voice</string>
-    <string name="muted">Muted</string>
-    <string name="mic">Mic</string>
-    <string name="eye">Eye</string>
-    <string name="copy">Copy log</string>
-    <string name="input_hint">Talk to TARS — or \$ command, py code…</string>
-    <string name="greeting">TARS online. Talk to me in English or Russian — or run \$ shell / py code right here.</string>
+    <string name="input_hint">Talk to TARS — English or Russian…</string>
+    <string name="greeting">TARS online. Talk to me in English or Russian. Tap \'Brain\' once to load my real on-device mind.</string>
 </resources>

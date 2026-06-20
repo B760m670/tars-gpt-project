@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<paths>
-    <!-- The updater downloads the APK into the app's internal files dir. -->
-    <files-path name="files" path="." />
-</paths>

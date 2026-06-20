@@ -10,65 +10,25 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
+        android:gravity="center_vertical"
         android:paddingBottom="6dp">
 
         <Button
             android:id="@+id/brain"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:minWidth="0dp"
             android:text="@string/brain" />
-
-        <Button
-            android:id="@+id/voice"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:minWidth="0dp"
-            android:text="@string/voice" />
-
-        <Button
-            android:id="@+id/mic"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:minWidth="0dp"
-            android:text="@string/mic" />
-
-        <Button
-            android:id="@+id/eye"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:minWidth="0dp"
-            android:text="@string/eye" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingTop="2dp"
-        android:paddingBottom="6dp">
 
         <TextView
             android:id="@+id/status"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:layout_marginStart="10dp"
             android:fontFamily="monospace"
             android:textSize="12sp"
             android:textColor="#FFC56306"
-            android:text="TARS · STANDBY" />
-
-        <View
-            android:id="@+id/cue"
-            android:layout_width="10dp"
-            android:layout_height="10dp"
-            android:layout_marginStart="8dp"
-            android:background="#FF3A2A00" />
+            android:text="TARS · OFFLINE" />
     </LinearLayout>
 
     <ScrollView
@@ -86,14 +46,6 @@
             android:textColor="#FFFFB000"
             android:textIsSelectable="true" />
     </ScrollView>
-
-    <LinearLayout
-        android:id="@+id/vu"
-        android:layout_width="match_parent"
-        android:layout_height="22dp"
-        android:orientation="horizontal"
-        android:gravity="bottom"
-        android:paddingTop="4dp" />
 
     <LinearLayout
         android:layout_width="match_parent"
