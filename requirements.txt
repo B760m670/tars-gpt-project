@@ -1,9 +1,0 @@
-# The core needs only the Python standard library:
-#   - the on-device brain talks to llama.cpp/Ollama over HTTP via urllib
-#   - memory via sqlite3
-#
-# Later milestones add (kept here for reference):
-#   openwakeword        # wake word ("Hey TARS")
-#   vosk                # offline speech-to-text
-#   sherpa-onnx         # on-device neural TTS runtime
-#   TTS / f5-tts        # AI voice cloning of the original TARS voice

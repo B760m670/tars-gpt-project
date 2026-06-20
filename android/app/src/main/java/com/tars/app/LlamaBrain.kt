@@ -44,6 +44,16 @@ class LlamaBrain(context: Context) {
         }
     }
 
+    /** Re-imprint the character on the running engine (e.g. after the dials
+     *  change). This resets the conversation context — expected when the
+     *  personality changes. Returns null on success, else an error. */
+    fun setSystemPrompt(systemPrompt: String): String? {
+        if (!ready) return "engine not loaded"
+        return runOnWorker {
+            if (native.processSystemPrompt(systemPrompt) != 0) "failed to apply settings" else null
+        }
+    }
+
     /** One self-test line — proof the engine actually thinks. */
     fun selfTest(): String =
         reply("/no_think Ответь одним коротким предложением в характере TARS: ты в сети?", null)

@@ -164,8 +164,14 @@ class MainActivity : AppCompatActivity() {
                 personality.humor = cur[0]; personality.honesty = cur[1]
                 personality.discretion = cur[2]; personality.sarcasm = cur[3]
                 setStatus()
-                log("settings: humor=${cur[0]} honesty=${cur[1]} discretion=${cur[2]} sarcasm=${cur[3]}" +
-                    if (brain.ready) " (re-tap 'Brain' to re-imprint the running engine)" else "")
+                log("settings: humor=${cur[0]} honesty=${cur[1]} discretion=${cur[2]} sarcasm=${cur[3]}")
+                // Apply live: re-imprint the running engine with the new character
+                // (resets the current conversation context — expected).
+                if (brain.ready) brainExec.execute {
+                    val err = brain.setSystemPrompt(personality.systemPrompt())
+                    log(if (err == null) "settings: applied to the engine (context reset)"
+                        else "settings: $err")
+                }
             }
             .setNegativeButton("Cancel", null)
             .show()

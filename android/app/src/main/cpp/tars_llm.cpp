@@ -107,6 +107,11 @@ static common_sampler *new_sampler(float temp) {
     common_params_sampling sparams;
     sparams.temp = temp;
     sparams.top_p = DEFAULT_SAMPLER_TOP_P;
+    sparams.top_k = 20;                 // Qwen3's recommended /no_think setting
+    // Small models loop badly without a repetition penalty (the "…на голове? Нет,
+    // в смысле…" spiral). Penalize recent repeats to keep TARS from stuttering.
+    sparams.penalty_repeat = 1.15f;
+    sparams.penalty_last_n = 256;
     return common_sampler_init(g_model, sparams);
 }
 
