@@ -10,10 +10,9 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * The cloud mind. For now a single provider — OpenAI (ChatGPT) via its
- * /v1/chat/completions endpoint. Free daily tokens require opting into data
- * sharing on the OpenAI account. Kept deliberately small; more providers can
- * join behind the same [Brain] interface later.
+ * The cloud mind — Google Gemini via its OpenAI-compatible endpoint. Gemini's
+ * free tier just works with an API key (no data-sharing / billing gate): ~1500
+ * requests/day on Flash models, resets midnight Pacific. Excellent Russian.
  *
  * The user's own API key lives locally (see [KeyStore]); nothing is shipped.
  */
@@ -24,8 +23,8 @@ class RemoteBrain(private val store: KeyStore) : Brain {
         .readTimeout(120, TimeUnit.SECONDS)
         .build()
 
-    private val base = "https://api.openai.com/v1"
-    val defaultModel = "gpt-5"
+    private val base = "https://generativelanguage.googleapis.com/v1beta/openai"
+    val defaultModel = "gemini-3-flash"
 
     private val system =
         "You are TARS, the robot from the film Interstellar: dry, deadpan wit, " +
@@ -33,7 +32,7 @@ class RemoteBrain(private val store: KeyStore) : Brain {
         "Russian or English — with correct, natural grammar."
 
     override fun reply(prompt: String): String {
-        val key = store.key() ?: return "no API key set. add it with:  /key <your_openai_key>"
+        val key = store.key() ?: return "no API key set. add it with:  /key <your_gemini_key>"
         val model = store.model() ?: defaultModel
         val body = JSONObject()
             .put("model", model)
@@ -69,8 +68,8 @@ class RemoteBrain(private val store: KeyStore) : Brain {
                 val arr = JSONObject(s).getJSONArray("data")
                 val ids = ArrayList<String>()
                 for (i in 0 until arr.length()) ids.add(arr.getJSONObject(i).getString("id"))
-                val chat = ids.filter { it.startsWith("gpt") || it.startsWith("o") }.sorted()
-                (if (chat.isNotEmpty()) chat else ids.sorted()).joinToString("\n")
+                ids.map { it.removePrefix("models/") }.filter { it.startsWith("gemini") }.sorted().joinToString("\n")
+                    .ifBlank { ids.sorted().joinToString("\n") }
             }
         } catch (e: Exception) {
             "network error: ${e.message}"
@@ -78,10 +77,10 @@ class RemoteBrain(private val store: KeyStore) : Brain {
     }
 }
 
-/** Local storage for the user's own OpenAI key + chosen model. */
+/** Local storage for the user's own Gemini key + chosen model. */
 class KeyStore(private val prefs: SharedPreferences) {
-    fun key(): String? = prefs.getString("openai_key", null)?.ifBlank { null }
-    fun setKey(k: String) = prefs.edit().putString("openai_key", k).apply()
-    fun model(): String? = prefs.getString("openai_model", null)?.ifBlank { null }
-    fun setModel(m: String) = prefs.edit().putString("openai_model", m).apply()
+    fun key(): String? = prefs.getString("gemini_key", null)?.ifBlank { null }
+    fun setKey(k: String) = prefs.edit().putString("gemini_key", k).apply()
+    fun model(): String? = prefs.getString("gemini_model", null)?.ifBlank { null }
+    fun setModel(m: String) = prefs.edit().putString("gemini_model", m).apply()
 }

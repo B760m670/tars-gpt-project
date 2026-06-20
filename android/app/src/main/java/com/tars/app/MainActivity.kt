@@ -55,16 +55,16 @@ class MainActivity : AppCompatActivity() {
             "TARS SYSTEM // COSMOS-1A",
             "initializing core ............. ok",
             "personality matrix ........... loaded",
-            "uplink: OpenAI .............. ${if (hasKey) "key present" else "no key"}",
+            "uplink: Gemini ............... ${if (hasKey) "key present" else "no key"}",
         )
         var delay = 120L
         for (line in lines) { ui.postDelayed({ emit(line) }, delay); delay += 90 }
         ui.postDelayed({
             if (!hasKey) {
                 emit("")
-                emit("First run — connect TARS to OpenAI (free via data sharing):")
-                emit("  1) platform.openai.com -> enable data sharing, create a key")
-                emit("  2) here:  /key sk-...your_key...")
+                emit("First run — connect TARS to Google Gemini (free, ~1500/day):")
+                emit("  1) aistudio.google.com/apikey -> create a key (no card)")
+                emit("  2) here:  /key AI...your_key...")
                 emit("  3) talk to TARS.   ( /help for commands )")
             } else {
                 emit("")
@@ -117,7 +117,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshStatus() {
-        val mode = if (store.key() != null) "OPENAI:${store.model() ?: brain.defaultModel}" else "NO KEY"
+        val mode = if (store.key() != null) "GEMINI:${store.model() ?: brain.defaultModel}" else "NO KEY"
         setStatus(mode)
     }
 
@@ -134,12 +134,12 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private val HELP = listOf(
             "commands:",
-            "  /key <openai_key>   store your OpenAI key (local only)",
-            "  /model <id>         set model (default gpt-5)",
+            "  /key <gemini_key>   store your Gemini key (local only)",
+            "  /model <id>         set model (default gemini-3-flash)",
             "  /models             list models your key can use",
             "  /clear              clear the screen",
             "  /help               this list",
-            "free tokens need data sharing enabled at platform.openai.com",
+            "free key (no card): aistudio.google.com/apikey",
         ).joinToString("\n")
     }
 }
