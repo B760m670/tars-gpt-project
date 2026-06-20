@@ -24,6 +24,7 @@ class RemoteBrain(private val store: KeyStore) : Brain {
         .build()
 
     private val base = "https://generativelanguage.googleapis.com/v1beta/openai"
+    private val MAX_TRIES = 3
     val defaultModel = "gemini-3-flash"
 
     private val system = """
@@ -48,26 +49,38 @@ class RemoteBrain(private val store: KeyStore) : Brain {
     override fun reply(prompt: String): String {
         val key = store.key() ?: return "no API key set. add it with:  /key <your_gemini_key>"
         val model = store.model() ?: defaultModel
-        val body = JSONObject()
+        val bodyStr = JSONObject()
             .put("model", model)
             .put("messages", JSONArray()
                 .put(JSONObject().put("role", "system").put("content", system))
                 .put(JSONObject().put("role", "user").put("content", prompt)))
-        val req = Request.Builder()
-            .url("$base/chat/completions")
-            .addHeader("Authorization", "Bearer $key")
-            .post(body.toString().toRequestBody("application/json".toMediaType()))
-            .build()
-        return try {
-            http.newCall(req).execute().use { resp ->
-                val s = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) return "error HTTP ${resp.code}: ${s.take(220)}"
-                JSONObject(s).getJSONArray("choices").getJSONObject(0)
-                    .getJSONObject("message").getString("content").trim().ifBlank { "(empty reply)" }
+            .toString()
+        // Transient overloads (503 etc.) are common on the newest models — retry
+        // a few times with backoff before surfacing the error.
+        val transient = listOf(429, 500, 502, 503, 504)
+        var lastErr = "?"
+        repeat(MAX_TRIES) { attempt ->
+            val req = Request.Builder()
+                .url("$base/chat/completions")
+                .addHeader("Authorization", "Bearer $key")
+                .post(bodyStr.toRequestBody("application/json".toMediaType()))
+                .build()
+            try {
+                http.newCall(req).execute().use { resp ->
+                    val s = resp.body?.string().orEmpty()
+                    if (resp.isSuccessful) {
+                        return JSONObject(s).getJSONArray("choices").getJSONObject(0)
+                            .getJSONObject("message").getString("content").trim().ifBlank { "(empty reply)" }
+                    }
+                    lastErr = "HTTP ${resp.code}: ${s.take(180)}"
+                    if (resp.code !in transient) return "error $lastErr"
+                }
+            } catch (e: Exception) {
+                lastErr = "network error: ${e.message}"
             }
-        } catch (e: Exception) {
-            "network error: ${e.message}"
+            if (attempt < MAX_TRIES - 1) Thread.sleep(800L * (attempt + 1))
         }
+        return "busy — model overloaded, try again ($lastErr)"
     }
 
     /** List model ids this key can use (so /model picks a valid one). */
