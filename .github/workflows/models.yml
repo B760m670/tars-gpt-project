@@ -40,15 +40,11 @@ jobs:
           repo="${{ matrix.model.repo }}"
           canonical="${{ matrix.model.file }}"
           echo "querying HuggingFace API for $repo"
-          json="$(curl -fsSL "https://huggingface.co/api/models/$repo")"
-          # The GGUF filename/casing varies (e.g. lowercase, or a subfolder), so
-          # discover the actual Q4_K_M *.gguf instead of guessing (a wrong guess was
-          # the original 404). Prefer a single-file Q4_K_M; fall back to any gguf.
-          fname="$(printf '%s' "$json" | python3 -c "import sys,json,re
-s=json.load(sys.stdin).get('siblings',[])
-g=[x['rfilename'] for x in s if x['rfilename'].lower().endswith('.gguf')]
-q=[f for f in g if re.search('q4_k_m', f, re.I) and 'of' not in f.lower()]
-print((q or [f for f in g if re.search('q4_k_m', f, re.I)] or g or [''])[0])")"
+          curl -fsSL "https://huggingface.co/api/models/$repo" -o model.json
+          # The GGUF filename/casing varies (lowercase, or a subfolder), so discover
+          # the actual Q4_K_M *.gguf instead of guessing (a wrong guess was the
+          # original 404). Prefer a single-file Q4_K_M, then any Q4_K_M, then any gguf.
+          fname="$(jq -r '[.siblings[].rfilename | select(endswith(".gguf"))] as $g | ([ $g[] | select(test("q4_k_m";"i")) | select(test("-of-";"i")|not) ] + [ $g[] | select(test("q4_k_m";"i")) ] + $g)[0] // ""' model.json)"
           echo "resolved: '$fname'"
           test -n "$fname"
           curl -fL --retry 5 --retry-delay 5 \
