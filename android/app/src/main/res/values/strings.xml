@@ -2,5 +2,6 @@
 <resources>
     <string name="app_name">TARS</string>
     <string name="send">SEND</string>
+    <string name="mic">MIC</string>
     <string name="input_hint">type a command…</string>
 </resources>

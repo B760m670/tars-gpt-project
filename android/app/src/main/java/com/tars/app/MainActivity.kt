@@ -1,5 +1,7 @@
 package com.tars.app
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -9,6 +11,8 @@ import android.widget.EditText
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -16,8 +20,8 @@ import java.util.concurrent.Executors
 
 /**
  * TARS as a terminal: black CRT screen, phosphor-green monospace log. You type
- * commands or talk; TARS answers in the same stream. The mind is [RemoteBrain]
- * (OpenAI for now). Slash-commands set the key and model.
+ * or speak (MIC); TARS answers in the stream and aloud. Brain = [RemoteBrain]
+ * (Gemini), mouth = [Voice] (on-device TTS + effects), ears = [Ears] (on-device STT).
  */
 class MainActivity : AppCompatActivity() {
 
@@ -32,6 +36,8 @@ class MainActivity : AppCompatActivity() {
     private val prefs by lazy { getSharedPreferences("tars", MODE_PRIVATE) }
     private val store by lazy { KeyStore(prefs) }
     private val brain by lazy { RemoteBrain(store) }
+    private val voice by lazy { Voice(this, prefs) { line -> log(line) } }
+    private val ears by lazy { Ears(this) { line -> log(line) } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,18 +49,21 @@ class MainActivity : AppCompatActivity() {
         stream.movementMethod = ScrollingMovementMethod()
 
         findViewById<Button>(R.id.send).setOnClickListener { submit() }
+        findViewById<Button>(R.id.mic).setOnClickListener { startListening() }
         findViewById<EditText>(R.id.input).setOnEditorActionListener { _, _, _ -> submit(); true }
+
+        voice            // kick off TTS init
+        ears.onResult = { text -> emit("> $text"); handleUserText(text) }
 
         boot()
     }
 
-    /** Green boot log — TARS terminal tone, plus a first-run quick start. */
     private fun boot() {
         val hasKey = store.key() != null
         val lines = listOf(
             "TARS SYSTEM // COSMOS-1A",
             "initializing core ............. ok",
-            "personality matrix ........... loaded",
+            "voice + ears ................. on-device",
             "uplink: Gemini ............... ${if (hasKey) "key present" else "no key"}",
         )
         var delay = 120L
@@ -65,10 +74,10 @@ class MainActivity : AppCompatActivity() {
                 emit("First run — connect TARS to Google Gemini (free, ~1500/day):")
                 emit("  1) aistudio.google.com/apikey -> create a key (no card)")
                 emit("  2) here:  /key AI...your_key...")
-                emit("  3) talk to TARS.   ( /help for commands )")
+                emit("  3) talk or tap MIC.   ( /help for commands )")
             } else {
                 emit("")
-                emit("TARS online. Talk to me — or /help.")
+                emit("TARS online. Talk, or tap MIC to speak. /help for commands.")
             }
             refreshStatus()
         }, delay)
@@ -80,12 +89,36 @@ class MainActivity : AppCompatActivity() {
         if (text.isEmpty()) return
         input.setText("")
         emit("> $text")
+        handleUserText(text)
+    }
+
+    private fun handleUserText(text: String) {
         if (text.startsWith("/")) { handleCommand(text); return }
         setStatus("THINKING")
         work.execute {
             val reply = brain.reply(text)
             emit("TARS> $reply")
+            voice.speak(reply)
             refreshStatus()
+        }
+    }
+
+    // ---- voice input ----
+
+    private fun startListening() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC)
+            return
+        }
+        ears.start()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_MIC) {
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) ears.start()
+            else emit("mic: permission denied")
         }
     }
 
@@ -95,13 +128,19 @@ class MainActivity : AppCompatActivity() {
         val parts = line.trim().split(Regex("\\s+"))
         when (parts[0].lowercase(Locale.US)) {
             "/help" -> emit(HELP)
-            "/key" -> if (parts.size >= 2) {
-                store.setKey(parts[1]); emit("key stored locally."); refreshStatus()
-            } else emit("usage: /key <openai_key>")
-            "/model" -> if (parts.size >= 2) {
-                store.setModel(parts[1]); emit("model = ${parts[1]}"); refreshStatus()
-            } else emit("usage: /model <model_id>   (current: ${store.model() ?: brain.defaultModel})")
+            "/key" -> if (parts.size >= 2) { store.setKey(parts[1]); emit("key stored locally."); refreshStatus() }
+                      else emit("usage: /key <gemini_key>")
+            "/model" -> if (parts.size >= 2) { store.setModel(parts[1]); emit("model = ${parts[1]}"); refreshStatus() }
+                        else emit("usage: /model <id>   (current: ${store.model() ?: brain.defaultModel})")
             "/models" -> { emit("fetching available models…"); work.execute { emit(brain.listModels()) } }
+            "/voice" -> { voice.enabled = !voice.enabled; emit("voice: ${if (voice.enabled) "on" else "off"}") }
+            "/rate" -> parts.getOrNull(1)?.toFloatOrNull()?.let { voice.rate = it; emit("rate = $it") }
+                       ?: emit("usage: /rate <0.5-1.5>   (current ${voice.rate})")
+            "/pitch" -> parts.getOrNull(1)?.toFloatOrNull()?.let { voice.pitch = it; emit("pitch = $it") }
+                        ?: emit("usage: /pitch <0.5-2.0>   (current ${voice.pitch})")
+            "/nasal" -> parts.getOrNull(1)?.toFloatOrNull()?.let { voice.nasal = it; emit("nasal = $it") }
+                        ?: emit("usage: /nasal <0-1>   (current ${voice.nasal})")
+            "/say" -> { val t = line.substringAfter("/say").trim(); if (t.isNotEmpty()) voice.speak(t) else emit("usage: /say <text>") }
             "/clear" -> ui.post { stream.text = "" }
             else -> emit("unknown command '${parts[0]}'. /help")
         }
@@ -109,12 +148,14 @@ class MainActivity : AppCompatActivity() {
 
     // ---- terminal output ----
 
-    /** Append a line. Safe from any thread. */
     private fun emit(line: String) = ui.post {
         if (stream.text.isNotEmpty()) stream.append("\n")
         stream.append(line)
         streamScroll.post { streamScroll.fullScroll(ScrollView.FOCUS_DOWN) }
     }
+
+    /** alias for internal logging into the same stream */
+    private fun log(line: String) = emit("· $line")
 
     private fun refreshStatus() {
         val mode = if (store.key() != null) "GEMINI:${store.model() ?: brain.defaultModel}" else "NO KEY"
@@ -122,24 +163,32 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setStatus(mode: String) = ui.post {
-        statusView.text = "TARS · $mode · ${clock.format(Date())}"
+        statusView.text = "TARS · $mode · ${if (voice.enabled) "VOICE" else "MUTE"} · ${clock.format(Date())}"
     }
 
     override fun onDestroy() {
         ui.removeCallbacksAndMessages(null)
+        runCatching { voice.shutdown() }
+        runCatching { ears.destroy() }
         work.shutdownNow()
         super.onDestroy()
     }
 
     companion object {
+        private const val REQ_MIC = 101
         private val HELP = listOf(
             "commands:",
             "  /key <gemini_key>   store your Gemini key (local only)",
             "  /model <id>         set model (default gemini-3-flash)",
             "  /models             list models your key can use",
+            "  /voice              toggle speaking aloud on/off",
+            "  /rate <0.5-1.5>     speech speed",
+            "  /pitch <0.5-2.0>    voice pitch",
+            "  /nasal <0-1>        nasal / VHS colour (Gavrilov-ish)",
+            "  /say <text>         test the voice",
             "  /clear              clear the screen",
             "  /help               this list",
-            "free key (no card): aistudio.google.com/apikey",
+            "MIC button = speak to TARS. free key: aistudio.google.com/apikey",
         ).joinToString("\n")
     }
 }

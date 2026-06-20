@@ -77,6 +77,17 @@
             android:hint="@string/input_hint" />
 
         <Button
+            android:id="@+id/mic"
+            style="?android:attr/buttonStyleSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@null"
+            android:fontFamily="monospace"
+            android:textColor="#FF00FF66"
+            android:textSize="14sp"
+            android:text="@string/mic" />
+
+        <Button
             android:id="@+id/send"
             style="?android:attr/buttonStyleSmall"
             android:layout_width="wrap_content"
