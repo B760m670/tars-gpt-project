@@ -33,8 +33,9 @@ constexpr int   N_THREADS_HEADROOM      = 2;
 constexpr int   DEFAULT_CONTEXT_SIZE    = 4096;
 constexpr int   OVERFLOW_HEADROOM       = 4;
 constexpr int   BATCH_SIZE              = 512;
-// TARS character wants a little warmth, not robotic determinism.
-constexpr float DEFAULT_SAMPLER_TEMP    = 0.7f;
+// TARS character wants a little warmth, not robotic determinism — but a small
+// model rambles and contradicts itself at high temp, so keep it fairly low.
+constexpr float DEFAULT_SAMPLER_TEMP    = 0.6f;
 constexpr float DEFAULT_SAMPLER_TOP_P   = 0.8f;
 
 static llama_model                      * g_model;
