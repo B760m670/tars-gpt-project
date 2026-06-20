@@ -257,4 +257,8 @@ class MainActivity : AppCompatActivity() {
         brainExec.shutdownNow()
         super.onDestroy()
     }
+
+    companion object {
+        private const val KEY_MODEL = "model_id"
+    }
 }
