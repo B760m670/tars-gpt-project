@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     private val clock = SimpleDateFormat("HH:mm:ss", Locale.US)
 
     private val personality = Personality()
+    private val prefs by lazy { getSharedPreferences("tars", MODE_PRIVATE) }
     private lateinit var brain: LlamaBrain
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,12 +93,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun modelsDir(): File = File(filesDir, "models").apply { mkdirs() }
 
+    /** The model to use: the one the user explicitly picked, else the device-RAM
+     *  recommendation. */
+    private fun chosenSpec(): ModelCatalog.Spec? =
+        ModelCatalog.byId(prefs.getString(KEY_MODEL, null)) ?: ModelCatalog.recommend()
+
     private fun autoStart() {
-        val spec = ModelCatalog.recommend() ?: return
+        val spec = chosenSpec() ?: return
         val model = File(modelsDir(), spec.fileName)
         if (model.exists() && model.length() > 0) {
             log("brain: found ${spec.id}, loading on-device engine…")
-            loadBrain(model)
+            loadModel(spec)
         } else {
             log("brain: no model yet — tap 'Brain' to download ${spec.id} (~${spec.fileMb} MB).")
         }
@@ -105,36 +111,59 @@ class MainActivity : AppCompatActivity() {
 
     private fun setUpBrain() {
         log("brain: setting up on-device engine…")
-        brainExec.execute {
-            val ram = ModelCatalog.totalRamMb()
-            val spec = ModelCatalog.recommend(ram)
-            if (spec == null) {
-                log("brain: device RAM (${ram ?: "?"} MB) too low for a local model — offline brain only.")
-                return@execute
-            }
-            val model = File(modelsDir(), spec.fileName)
-            if (!(model.exists() && model.length() > 0)) {
-                log("brain: model = ${spec.id} (~${spec.fileMb} MB) from GitHub release")
-                val err = ModelDownloader.download(spec.url, model) { line -> log(line) }
-                if (err != null) { log(err); return@execute }
-            }
-            loadBrain(model)
-        }
+        brainExec.execute { ensureAndLoad(chosenSpec()) }
     }
 
-    private fun loadBrain(model: File) {
-        if (brain.ready) return
-        log("brain: loading model into llama.cpp (a few seconds)…")
-        val err = brain.load(model.absolutePath, personality.systemPrompt())
-        if (err != null) {
-            log("brain: $err")
+    /** Download the model if missing, then load it. Off the UI thread. */
+    private fun ensureAndLoad(spec: ModelCatalog.Spec?) {
+        if (spec == null) {
+            log("brain: device RAM too low for a local model — offline brain only.")
             return
         }
+        val model = File(modelsDir(), spec.fileName)
+        if (!(model.exists() && model.length() > 0)) {
+            log("brain: model = ${spec.id} (~${spec.fileMb} MB) from GitHub release")
+            val err = ModelDownloader.download(spec.url, model) { line -> log(line) }
+            if (err != null) { log(err); return }
+        }
+        loadModel(spec)
+    }
+
+    private fun loadModel(spec: ModelCatalog.Spec) {
+        val model = File(modelsDir(), spec.fileName)
+        if (brain.ready && brain.loadedModelPath == model.absolutePath) {
+            log("brain: ${spec.id} already loaded")
+            return
+        }
+        log("brain: loading ${spec.id} into llama.cpp (a few seconds)…")
+        val err = brain.load(model.absolutePath, personality.systemPrompt())
+        if (err != null) { log("brain: $err"); return }
         log("brain: engine READY — running a quick self-test…")
-        val proof = brain.selfTest()
-        log("brain: self-test — TARS says: \"$proof\"")
-        log("brain: TARS now thinks on-device. Talk to him.")
+        log("brain: self-test — TARS says: \"${brain.selfTest()}\"")
+        log("brain: now thinking on ${spec.id}. Talk to him.")
         setStatus()
+    }
+
+    /** Pick / switch the on-device model (downloads it if needed, then loads). */
+    private fun showModelPicker() {
+        val ram = ModelCatalog.totalRamMb()
+        val rec = ModelCatalog.recommend(ram)
+        val specs = ModelCatalog.catalog
+        val labels = specs.map { s ->
+            val heavy = if (ram != null && !ModelCatalog.fits(s, ram)) " — heavy" else ""
+            val mark = if (s.id == rec?.id) " ✓" else ""
+            "${s.label}  ~${s.fileMb}MB$mark$heavy"
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Model (brain)")
+            .setItems(labels) { _, i ->
+                val s = specs[i]
+                prefs.edit().putString(KEY_MODEL, s.id).apply()
+                log("model: selected ${s.id}")
+                brainExec.execute { ensureAndLoad(s) }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     // ---- Personality dials ----
@@ -179,13 +208,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(0, 1, 0, "Personality")
-        menu.add(0, 2, 1, "Copy log")
+        menu.add(0, 3, 1, "Model")
+        menu.add(0, 2, 2, "Copy log")
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             1 -> { showDials(); return true }
+            3 -> { showModelPicker(); return true }
             2 -> { copyLog(); return true }
         }
         return super.onOptionsItemSelected(item)

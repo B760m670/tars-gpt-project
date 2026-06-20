@@ -25,11 +25,16 @@ object ModelCatalog {
         val url: String get() = "$RELEASE_BASE/$fileName"
     }
 
-    // Light -> heavy. Q4_K_M GGUFs of Qwen3 (bilingual RU/EN, strong character).
+    // Light -> heavy (recommend() picks the heaviest that fits). Q4_K_M GGUFs.
+    // Vikhr is a Russian-specialised model (continued Russian pre-training +
+    // Russian-optimised tokenizer) — noticeably better, more native Russian than
+    // vanilla Qwen at the same size, still bilingual. It sits as the default pick
+    // for a phone; Qwen3 stays selectable for comparison.
     val catalog = listOf(
         Spec("qwen3-0.6b", "Feather", "Qwen3-0.6B-Q4_K_M.gguf", 500, 1200),
-        Spec("qwen3-1.7b", "Light", "Qwen3-1.7B-Q4_K_M.gguf", 1100, 2400),
-        Spec("qwen3-4b", "Standard", "Qwen3-4B-Q4_K_M.gguf", 2500, 4400),
+        Spec("qwen3-1.7b", "Qwen3 (1.7B)", "Qwen3-1.7B-Q4_K_M.gguf", 1100, 2400),
+        Spec("vikhr-1.5b", "Vikhr (RU, 1.5B)", "vikhr-qwen2.5-1.5b-Q4_K_M.gguf", 1100, 2400),
+        Spec("qwen3-4b", "Qwen3 (4B)", "Qwen3-4B-Q4_K_M.gguf", 2500, 4400),
     )
 
     private const val HEADROOM = 0.7
@@ -41,7 +46,9 @@ object ModelCatalog {
             ?.split(Regex("\\s+"))?.getOrNull(1)?.toInt()?.div(1024)
     } catch (e: Exception) { null }
 
-    private fun fits(spec: Spec, ramMb: Int) = spec.minRamMb <= ramMb * HEADROOM
+    fun byId(id: String?): Spec? = catalog.firstOrNull { it.id == id }
+
+    fun fits(spec: Spec, ramMb: Int) = spec.minRamMb <= ramMb * HEADROOM
 
     /** Heaviest model that comfortably fits, or null → offline brain only. */
     fun recommend(ramMb: Int? = totalRamMb()): Spec? {

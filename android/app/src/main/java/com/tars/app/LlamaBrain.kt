@@ -20,16 +20,23 @@ class LlamaBrain(context: Context) {
 
     @Volatile var ready = false
         private set
+    /** Absolute path of the currently loaded model, or null. Lets the UI avoid
+     *  reloading the same model and switch between models cleanly. */
+    @Volatile var loadedModelPath: String? = null
+        private set
+    private var initialized = false
 
-    /** Load a model and imprint the TARS character. Blocks the caller's thread;
-     *  call from a background thread. Returns null on success, else an error. */
+    /** Load a model and imprint the TARS character. If another model is already
+     *  loaded it is unloaded first, so this also switches models. Blocks the
+     *  caller's thread; call from a background thread. Returns null on success. */
     fun load(modelPath: String, systemPrompt: String): String? {
         return runOnWorker {
             try {
                 LlamaNative.ensureLibrary()
-                native.init(nativeLibDir)
+                if (!initialized) { native.init(nativeLibDir); initialized = true }
                 if (!File(modelPath).let { it.exists() && it.canRead() })
                     return@runOnWorker "model file missing or unreadable"
+                if (ready) { native.unload(); ready = false; loadedModelPath = null }
                 if (native.load(modelPath) != 0)
                     return@runOnWorker "model failed to load (unsupported/corrupt GGUF?)"
                 if (native.prepare() != 0)
@@ -37,6 +44,7 @@ class LlamaBrain(context: Context) {
                 if (native.processSystemPrompt(systemPrompt) != 0)
                     return@runOnWorker "failed to set the character prompt"
                 ready = true
+                loadedModelPath = modelPath
                 null
             } catch (e: Throwable) {
                 "engine error: ${e.message}"
@@ -85,8 +93,9 @@ class LlamaBrain(context: Context) {
 
     fun shutdown() {
         runOnWorker {
-            try { if (ready) native.unload(); native.shutdown() } catch (_: Throwable) {}
+            try { if (ready) native.unload(); if (initialized) native.shutdown() } catch (_: Throwable) {}
             ready = false
+            loadedModelPath = null
         }
         worker.shutdown()
     }

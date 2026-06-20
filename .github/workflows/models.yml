@@ -33,6 +33,8 @@ jobs:
             file: Qwen3-0.6B-Q4_K_M.gguf
           - repo: Qwen/Qwen3-1.7B-GGUF
             file: Qwen3-1.7B-Q4_K_M.gguf
+          - repo: Vikhrmodels/Vikhr-Qwen-2.5-1.5B-Instruct-GGUF
+            file: vikhr-qwen2.5-1.5b-Q4_K_M.gguf
     steps:
       - name: Resolve real filename on HuggingFace and download
         run: |
