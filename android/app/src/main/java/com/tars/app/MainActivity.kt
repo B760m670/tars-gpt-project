@@ -11,6 +11,7 @@ import android.text.method.ScrollingMovementMethod
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -44,6 +45,7 @@ class MainActivity : AppCompatActivity() {
     private val personality = Personality()
     private val prefs by lazy { getSharedPreferences("tars", MODE_PRIVATE) }
     private lateinit var brain: LlamaBrain
+    private lateinit var voice: Voice
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,6 +58,7 @@ class MainActivity : AppCompatActivity() {
         stream.text = getString(R.string.greeting)
 
         brain = LlamaBrain(this)
+        voice = Voice(this, prefs) { line -> log(line) }
 
         findViewById<Button>(R.id.brain).setOnClickListener { setUpBrain() }
         findViewById<Button>(R.id.send).setOnClickListener { submit() }
@@ -82,10 +85,11 @@ class MainActivity : AppCompatActivity() {
         if (brain.ready) {
             runOnUiThread { appendInline("\nTARS> ") }
             val full = brain.reply(text) { chunk -> runOnUiThread { appendInline(chunk) } }
-            if (full.isBlank()) runOnUiThread { appendInline("…") }
+            if (full.isBlank()) runOnUiThread { appendInline("…") } else voice.speak(full)
         } else {
             val reply = OfflineBrain.reply(text)
             runOnUiThread { appendLine("TARS> $reply") }
+            voice.speak(reply)
         }
     }
 
@@ -208,18 +212,59 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(0, 1, 0, "Personality")
-        menu.add(0, 3, 1, "Model")
-        menu.add(0, 2, 2, "Copy log")
+        menu.add(0, 4, 1, "Voice")
+        menu.add(0, 3, 2, "Model")
+        menu.add(0, 2, 3, "Copy log")
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             1 -> { showDials(); return true }
+            4 -> { showVoice(); return true }
             3 -> { showModelPicker(); return true }
             2 -> { copyLog(); return true }
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    // ---- Voice ----
+
+    private fun showVoice() {
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 24, 48, 0) }
+        val onBox = CheckBox(this).apply { text = "Speak replies aloud"; isChecked = voice.enabled }
+        root.addView(onBox)
+        val rateGet = addSlider(root, "Rate (slow ⟵ ⟶ fast)", 0.5f, 1.5f, voice.rate)
+        val pitchGet = addSlider(root, "Pitch (low ⟵ ⟶ high)", 0.7f, 1.2f, voice.pitch)
+        val nasalGet = addSlider(root, "Nasal / VHS colour", 0f, 1f, voice.nasal)
+        AlertDialog.Builder(this)
+            .setTitle("Voice")
+            .setView(ScrollView(this).apply { addView(root) })
+            .setPositiveButton("Apply") { _, _ ->
+                voice.rate = rateGet(); voice.pitch = pitchGet(); voice.nasal = nasalGet()
+                voice.enabled = onBox.isChecked
+                log("voice: ${if (voice.enabled) "on" else "off"} " +
+                    "rate=${"%.2f".format(voice.rate)} pitch=${"%.2f".format(voice.pitch)} nasal=${"%.2f".format(voice.nasal)}")
+                if (voice.enabled) voice.speak("Системы в норме. Я ТАРС.")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Add a labelled 0..100 SeekBar mapped to [min,max]; returns a reader for its value. */
+    private fun addSlider(root: LinearLayout, name: String, min: Float, max: Float, cur: Float): () -> Float {
+        val label = TextView(this).apply { textSize = 14f }
+        val bar = SeekBar(this).apply { max = 100 }
+        fun fmt(v: Float) { label.text = "$name: ${"%.2f".format(v)}" }
+        bar.progress = (((cur - min) / (max - min)) * 100).toInt().coerceIn(0, 100)
+        fmt(cur)
+        bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, v: Int, fromUser: Boolean) { fmt(min + (max - min) * v / 100f) }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+        root.addView(label); root.addView(bar)
+        return { min + (max - min) * bar.progress / 100f }
     }
 
     private fun copyLog() {
@@ -254,6 +299,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         ui.removeCallbacksAndMessages(null)
         if (::brain.isInitialized) brain.shutdown()
+        if (::voice.isInitialized) voice.shutdown()
         brainExec.shutdownNow()
         super.onDestroy()
     }
