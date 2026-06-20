@@ -5,10 +5,20 @@ name: Mirror models to release
 # CDN caused the "download interrupted (0 MB)" failures on-device). HuggingFace IS
 # reachable from GitHub runners, so we mirror here, once, on demand.
 #
-# Run manually: Actions → "Mirror models to release" → Run workflow.
+# Run manually (once it's on the default branch): Actions → "Mirror models to
+# release" → Run workflow. Until then, it also runs whenever THIS file is pushed
+# (so it can be triggered from a feature branch — workflow_dispatch only shows on
+# the default branch).
+#
+# NOTE: GitHub release assets are capped at 2 GB/file, so only the 0.6B and 1.7B
+# GGUFs are mirrored here (the 1.7B is the pick for a 6 GB phone). The 4B (~2.5 GB)
+# needs a different host and is left out for now.
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/models.yml
 
 permissions:
   contents: write
@@ -23,8 +33,6 @@ jobs:
             file: Qwen3-0.6B-Q4_K_M.gguf
           - repo: Qwen/Qwen3-1.7B-GGUF
             file: Qwen3-1.7B-Q4_K_M.gguf
-          - repo: Qwen/Qwen3-4B-GGUF
-            file: Qwen3-4B-Q4_K_M.gguf
     steps:
       - name: Download ${{ matrix.model.file }} from HuggingFace
         run: |
