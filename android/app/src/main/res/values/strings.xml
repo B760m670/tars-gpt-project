@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TARS</string>
-    <string name="send">Send</string>
-    <string name="brain">Brain</string>
-    <string name="input_hint">Talk to TARS — English or Russian…</string>
-    <string name="greeting">TARS online. Talk to me in English or Russian. Tap \'Brain\' once to load my real on-device mind.</string>
+    <string name="send">SEND</string>
+    <string name="input_hint">type a command…</string>
 </resources>

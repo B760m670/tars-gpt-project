@@ -10,53 +10,13 @@ def tarsVersionName = (project.findProperty('versionName') ?: 'dev').toString()
 android {
     namespace 'com.tars.app'
     compileSdk 34
-    ndkVersion '26.3.11579264'
 
     defaultConfig {
         applicationId 'com.tars.app'
-        minSdk 30            // Android 11+. The target Galaxy A32-class phones ship
-                             // on 11+, and 30 keeps the NDK availability floor high
-                             // enough that the engine's API-30 symbols compile
-                             // cleanly (no -Werror=unguarded-availability).
+        minSdk 30
         versionCode tarsVersionCode
         versionName tarsVersionName
         targetSdk 34
-
-        // arm64 only: every real phone is arm64, and the engine is tuned for it.
-        ndk {
-            abiFilters 'arm64-v8a'
-        }
-
-        externalNativeBuild {
-            cmake {
-                // llama.cpp / ggml build flags. We build ONE CPU backend tuned for
-                // the target class (armv8.2-a + dotprod = Cortex-A75 / Galaxy A32),
-                // not the multi-variant set: GGML_CPU_ALL_VARIANTS on this tag emits
-                // armv9.2 +SVE2/+SME variants whose -march tags NDK r26's clang
-                // rejects. armv8.2-a is the floor for every model-capable phone, and
-                // ggml still runtime-detects finer kernels — so no SIGILL. Common is
-                // built for the chat-template + sampler helpers the JNI uses.
-                arguments += '-DCMAKE_BUILD_TYPE=Release'
-                arguments += '-DBUILD_SHARED_LIBS=ON'
-                arguments += '-DGGML_NATIVE=OFF'
-                arguments += '-DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod'
-                arguments += '-DGGML_LLAMAFILE=OFF'
-                arguments += '-DGGML_OPENMP=OFF'
-                arguments += '-DLLAMA_BUILD_COMMON=ON'
-                arguments += '-DLLAMA_BUILD_TESTS=OFF'
-                arguments += '-DLLAMA_BUILD_EXAMPLES=OFF'
-                arguments += '-DLLAMA_BUILD_TOOLS=OFF'
-                arguments += '-DLLAMA_CURL=OFF'
-                cppFlags ''
-            }
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path 'src/main/cpp/CMakeLists.txt'
-            version '3.22.1'
-        }
     }
 
     compileOptions {
@@ -87,16 +47,12 @@ android {
             signingConfig signingConfigs.tars
         }
     }
-
-    packagingOptions {
-        jniLibs {
-            useLegacyPackaging true
-        }
-    }
 }
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.core:core-ktx:1.13.1'
+    // Cloud brain: a pool of free OpenAI-compatible providers, called over HTTP.
+    // (org.json for request/response bodies is built into the Android platform.)
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 }

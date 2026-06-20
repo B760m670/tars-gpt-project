@@ -12,13 +12,6 @@ concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # Pinned llama.cpp release — reproducible builds (no more "latest tag breaks
-  # the flags on its own"). Bump deliberately, never implicitly.
-  LLAMA_TAG: b9733
-  NDK_VERSION: 26.3.11579264
-  CMAKE_VERSION: 3.22.1
-
 jobs:
   build:
     name: Build debug APK
@@ -34,21 +27,6 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Install NDK & CMake
-        run: |
-          yes | sdkmanager "ndk;${NDK_VERSION}" "cmake;${CMAKE_VERSION}" >/dev/null
-
-      # The on-device engine: llama.cpp is compiled from source by the app's
-      # CMake (externalNativeBuild). We clone the PINNED tag next to the JNI code;
-      # it's gitignored, never committed.
-      - name: Fetch llama.cpp (pinned ${{ env.LLAMA_TAG }})
-        run: |
-          set -e
-          git clone --depth 1 --branch "$LLAMA_TAG" \
-            https://github.com/ggml-org/llama.cpp \
-            android/app/src/main/cpp/llama.cpp
-          echo "llama.cpp at: $(git -C android/app/src/main/cpp/llama.cpp describe --tags --always)"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -72,7 +50,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish APK to the rolling "latest" release
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/import-tars-folder-m8wylg' || github.ref == 'refs/heads/claude/russian-greeting-nesa0h'
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/russian-greeting-nesa0h'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest

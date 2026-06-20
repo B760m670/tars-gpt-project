@@ -1,51 +1,35 @@
 package com.tars.app
 
-import android.app.AlertDialog
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.method.ScrollingMovementMethod
-import android.view.Menu
-import android.view.MenuItem
 import android.widget.Button
-import android.widget.CheckBox
 import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
- * One screen, one stream. You talk to TARS; his system log scrolls in the same
- * view. v1 is brain + text only: the on-device llama.cpp engine does the real
- * thinking, with the scripted offline brain as a never-dead fallback. Voice,
- * ears and vision return as later, verified steps.
+ * TARS as a terminal: black CRT screen, phosphor-green monospace log. You type
+ * commands; TARS answers in the same stream. The mind is a pluggable [Brain] —
+ * currently a stub, next a pool of free cloud providers with auto-failover.
  */
 class MainActivity : AppCompatActivity() {
 
     private val ui = Handler(Looper.getMainLooper())
-    private val brainExec = Executors.newSingleThreadExecutor()
+    private val work = Executors.newSingleThreadExecutor()
+    private val clock = SimpleDateFormat("HH:mm:ss", Locale.US)
 
     private lateinit var stream: TextView
     private lateinit var streamScroll: ScrollView
     private lateinit var statusView: TextView
 
-    private val diag = StringBuilder()
-    private val clock = SimpleDateFormat("HH:mm:ss", Locale.US)
-
-    private val personality = Personality()
-    private val prefs by lazy { getSharedPreferences("tars", MODE_PRIVATE) }
-    private lateinit var brain: LlamaBrain
-    private lateinit var voice: Voice
+    private val brain: Brain = StubBrain()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,21 +39,31 @@ class MainActivity : AppCompatActivity() {
         streamScroll = findViewById(R.id.scroll)
         statusView = findViewById(R.id.status)
         stream.movementMethod = ScrollingMovementMethod()
-        stream.text = getString(R.string.greeting)
 
-        brain = LlamaBrain(this)
-        voice = Voice(this, prefs) { line -> log(line) }
-
-        findViewById<Button>(R.id.brain).setOnClickListener { setUpBrain() }
         findViewById<Button>(R.id.send).setOnClickListener { submit() }
         findViewById<EditText>(R.id.input).setOnEditorActionListener { _, _, _ -> submit(); true }
 
-        setStatus()
-        log("console: type to talk — English or Russian.")
-        log("brain: tap 'Brain' to download the on-device model (one time), then TARS truly thinks.")
+        setStatus("BOOT")
+        boot()
+    }
 
-        // If a model is already downloaded, bring the brain up automatically.
-        brainExec.execute { autoStart() }
+    /** Green boot log — pure flavour, sets the TARS terminal tone. */
+    private fun boot() {
+        val lines = listOf(
+            "TARS SYSTEM // COSMOS-1A",
+            "initializing core ............. ok",
+            "personality matrix ........... loaded",
+            "uplink: cloud brain pool ..... not configured",
+            "",
+            "TARS online. No cloud providers wired yet — running on a stub mind.",
+            "Type anything to test the terminal.",
+        )
+        var delay = 120L
+        for (line in lines) {
+            ui.postDelayed({ emit(line) }, delay)
+            delay += 90
+        }
+        ui.postDelayed({ setStatus("STUB") }, delay)
     }
 
     private fun submit() {
@@ -77,234 +71,29 @@ class MainActivity : AppCompatActivity() {
         val text = input.text.toString().trim()
         if (text.isEmpty()) return
         input.setText("")
-        appendLine("\nyou> $text")
-        brainExec.execute { converse(text) }
-    }
-
-    private fun converse(text: String) {
-        if (brain.ready) {
-            runOnUiThread { appendInline("\nTARS> ") }
-            val full = brain.reply(text) { chunk -> runOnUiThread { appendInline(chunk) } }
-            if (full.isBlank()) runOnUiThread { appendInline("…") } else voice.speak(full)
-        } else {
-            val reply = OfflineBrain.reply(text)
-            runOnUiThread { appendLine("TARS> $reply") }
-            voice.speak(reply)
+        emit("> $text")
+        work.execute {
+            val reply = brain.reply(text)
+            emit("TARS> $reply")
         }
     }
 
-    // ---- Brain setup ----
+    // ---- terminal output ----
 
-    private fun modelsDir(): File = File(filesDir, "models").apply { mkdirs() }
-
-    /** The model to use: the one the user explicitly picked, else the device-RAM
-     *  recommendation. */
-    private fun chosenSpec(): ModelCatalog.Spec? =
-        ModelCatalog.byId(prefs.getString(KEY_MODEL, null)) ?: ModelCatalog.recommend()
-
-    private fun autoStart() {
-        val spec = chosenSpec() ?: return
-        val model = File(modelsDir(), spec.fileName)
-        if (model.exists() && model.length() > 0) {
-            log("brain: found ${spec.id}, loading on-device engine…")
-            loadModel(spec)
-        } else {
-            log("brain: no model yet — tap 'Brain' to download ${spec.id} (~${spec.fileMb} MB).")
-        }
+    /** Append a line to the screen. Safe to call from any thread. */
+    private fun emit(line: String) = ui.post {
+        if (stream.text.isNotEmpty()) stream.append("\n")
+        stream.append(line)
+        streamScroll.post { streamScroll.fullScroll(ScrollView.FOCUS_DOWN) }
     }
 
-    private fun setUpBrain() {
-        log("brain: setting up on-device engine…")
-        brainExec.execute { ensureAndLoad(chosenSpec()) }
-    }
-
-    /** Download the model if missing, then load it. Off the UI thread. */
-    private fun ensureAndLoad(spec: ModelCatalog.Spec?) {
-        if (spec == null) {
-            log("brain: device RAM too low for a local model — offline brain only.")
-            return
-        }
-        val model = File(modelsDir(), spec.fileName)
-        if (!(model.exists() && model.length() > 0)) {
-            log("brain: model = ${spec.id} (~${spec.fileMb} MB) from GitHub release")
-            val err = ModelDownloader.download(spec.url, model) { line -> log(line) }
-            if (err != null) { log(err); return }
-        }
-        loadModel(spec)
-    }
-
-    private fun loadModel(spec: ModelCatalog.Spec) {
-        val model = File(modelsDir(), spec.fileName)
-        if (brain.ready && brain.loadedModelPath == model.absolutePath) {
-            log("brain: ${spec.id} already loaded")
-            return
-        }
-        log("brain: loading ${spec.id} into llama.cpp (a few seconds)…")
-        val err = brain.load(model.absolutePath, personality.systemPrompt())
-        if (err != null) { log("brain: $err"); return }
-        log("brain: engine READY — running a quick self-test…")
-        log("brain: self-test — TARS says: \"${brain.selfTest()}\"")
-        log("brain: now thinking on ${spec.id}. Talk to him.")
-        setStatus()
-    }
-
-    /** Pick / switch the on-device model (downloads it if needed, then loads). */
-    private fun showModelPicker() {
-        val ram = ModelCatalog.totalRamMb()
-        val rec = ModelCatalog.recommend(ram)
-        val specs = ModelCatalog.catalog
-        val labels = specs.map { s ->
-            val heavy = if (ram != null && !ModelCatalog.fits(s, ram)) " — heavy" else ""
-            val mark = if (s.id == rec?.id) " ✓" else ""
-            "${s.label}  ~${s.fileMb}MB$mark$heavy"
-        }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("Model (brain)")
-            .setItems(labels) { _, i ->
-                val s = specs[i]
-                prefs.edit().putString(KEY_MODEL, s.id).apply()
-                log("model: selected ${s.id}")
-                brainExec.execute { ensureAndLoad(s) }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    // ---- Personality dials ----
-
-    private fun showDials() {
-        val names = listOf("Humor", "Honesty", "Discretion", "Sarcasm")
-        val cur = intArrayOf(personality.humor, personality.honesty, personality.discretion, personality.sarcasm)
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 24, 48, 0) }
-        for (i in 0 until 4) {
-            val label = TextView(this).apply { text = "${names[i]}: ${cur[i]}%"; textSize = 14f }
-            val bar = SeekBar(this).apply {
-                max = 100; progress = cur[i]
-                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                    override fun onProgressChanged(s: SeekBar?, v: Int, fromUser: Boolean) {
-                        cur[i] = v; label.text = "${names[i]}: $v%"
-                    }
-                    override fun onStartTrackingTouch(s: SeekBar?) {}
-                    override fun onStopTrackingTouch(s: SeekBar?) {}
-                })
-            }
-            root.addView(label); root.addView(bar)
-        }
-        AlertDialog.Builder(this)
-            .setTitle("TARS — settings")
-            .setView(ScrollView(this).apply { addView(root) })
-            .setPositiveButton("Apply") { _, _ ->
-                personality.humor = cur[0]; personality.honesty = cur[1]
-                personality.discretion = cur[2]; personality.sarcasm = cur[3]
-                setStatus()
-                log("settings: humor=${cur[0]} honesty=${cur[1]} discretion=${cur[2]} sarcasm=${cur[3]}")
-                // Apply live: re-imprint the running engine with the new character
-                // (resets the current conversation context — expected).
-                if (brain.ready) brainExec.execute {
-                    val err = brain.setSystemPrompt(personality.systemPrompt())
-                    log(if (err == null) "settings: applied to the engine (context reset)"
-                        else "settings: $err")
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(0, 1, 0, "Personality")
-        menu.add(0, 4, 1, "Voice")
-        menu.add(0, 3, 2, "Model")
-        menu.add(0, 2, 3, "Copy log")
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            1 -> { showDials(); return true }
-            4 -> { showVoice(); return true }
-            3 -> { showModelPicker(); return true }
-            2 -> { copyLog(); return true }
-        }
-        return super.onOptionsItemSelected(item)
-    }
-
-    // ---- Voice ----
-
-    private fun showVoice() {
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 24, 48, 0) }
-        val onBox = CheckBox(this).apply { text = "Speak replies aloud"; isChecked = voice.enabled }
-        root.addView(onBox)
-        val rateGet = addSlider(root, "Rate (slow ⟵ ⟶ fast)", 0.5f, 1.5f, voice.rate)
-        val pitchGet = addSlider(root, "Pitch (low ⟵ ⟶ high)", 0.7f, 1.2f, voice.pitch)
-        val nasalGet = addSlider(root, "Nasal / VHS colour", 0f, 1f, voice.nasal)
-        AlertDialog.Builder(this)
-            .setTitle("Voice")
-            .setView(ScrollView(this).apply { addView(root) })
-            .setPositiveButton("Apply") { _, _ ->
-                voice.rate = rateGet(); voice.pitch = pitchGet(); voice.nasal = nasalGet()
-                voice.enabled = onBox.isChecked
-                log("voice: ${if (voice.enabled) "on" else "off"} " +
-                    "rate=${"%.2f".format(voice.rate)} pitch=${"%.2f".format(voice.pitch)} nasal=${"%.2f".format(voice.nasal)}")
-                if (voice.enabled) voice.speak("Системы в норме. Я ТАРС.")
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    /** Add a labelled 0..100 SeekBar mapped to [min,max]; returns a reader for its value. */
-    private fun addSlider(root: LinearLayout, name: String, min: Float, max: Float, cur: Float): () -> Float {
-        val label = TextView(this).apply { textSize = 14f }
-        val bar = SeekBar(this).apply { max = 100 }
-        fun fmt(v: Float) { label.text = "$name: ${"%.2f".format(v)}" }
-        bar.progress = (((cur - min) / (max - min)) * 100).toInt().coerceIn(0, 100)
-        fmt(cur)
-        bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, v: Int, fromUser: Boolean) { fmt(min + (max - min) * v / 100f) }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-        root.addView(label); root.addView(bar)
-        return { min + (max - min) * bar.progress / 100f }
-    }
-
-    private fun copyLog() {
-        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(ClipData.newPlainText("TARS log", diag.toString()))
-        log("log: copied to clipboard")
-    }
-
-    // ---- stream helpers ----
-
-    @Synchronized
-    private fun log(line: String) {
-        diag.append(clock.format(Date())).append("  ").append(line).append('\n')
-        appendLine("· $line")
-    }
-
-    private fun appendLine(text: String) = ui.post {
-        stream.append("\n$text"); scrollDown()
-    }
-
-    private fun appendInline(text: String) = ui.post {
-        stream.append(text); scrollDown()
-    }
-
-    private fun scrollDown() = streamScroll.post { streamScroll.fullScroll(ScrollView.FOCUS_DOWN) }
-
-    private fun setStatus() = runOnUiThread {
-        val mind = if (::brain.isInitialized && brain.ready) "ON-DEVICE" else "OFFLINE"
-        statusView.text = "TARS · $mind · H${personality.humor} HON${personality.honesty} S${personality.sarcasm}"
+    private fun setStatus(mode: String) = ui.post {
+        statusView.text = "TARS · $mode · ${clock.format(Date())}"
     }
 
     override fun onDestroy() {
         ui.removeCallbacksAndMessages(null)
-        if (::brain.isInitialized) brain.shutdown()
-        if (::voice.isInitialized) voice.shutdown()
-        brainExec.shutdownNow()
+        work.shutdownNow()
         super.onDestroy()
-    }
-
-    companion object {
-        private const val KEY_MODEL = "model_id"
     }
 }
