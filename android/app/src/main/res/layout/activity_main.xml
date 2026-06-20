@@ -37,8 +37,7 @@
             android:textColor="#FF33FF66"
             android:textSize="13sp"
             android:lineSpacingMultiplier="1.1"
-            android:paddingTop="8dp"
-            android:textIsSelectable="true" />
+            android:paddingTop="8dp" />
     </ScrollView>
 
     <View

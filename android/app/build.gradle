@@ -27,6 +27,10 @@ android {
         jvmTarget = '17'
     }
 
+    buildFeatures {
+        buildConfig true
+    }
+
     // Fixed debug keystore committed to the repo so every build (here and in CI)
     // is signed with the same key — required for in-place app updates.
     signingConfigs {

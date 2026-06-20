@@ -1,6 +1,10 @@
 package com.tars.app
 
 import android.Manifest
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
@@ -10,6 +14,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -38,6 +43,7 @@ class MainActivity : AppCompatActivity() {
     private val brain by lazy { RemoteBrain(store) }
     private val voice by lazy { Voice(this, prefs) { line -> log(line) } }
     private val ears by lazy { Ears(this) { line -> log(line) } }
+    private val updater by lazy { Updater(this) { line -> log(line) } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,6 +53,12 @@ class MainActivity : AppCompatActivity() {
         streamScroll = findViewById(R.id.scroll)
         statusView = findViewById(R.id.status)
         stream.movementMethod = ScrollingMovementMethod()
+        stream.setOnLongClickListener {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("TARS terminal", stream.text))
+            Toast.makeText(this, "Скопировано", Toast.LENGTH_SHORT).show()
+            true
+        }
 
         findViewById<Button>(R.id.send).setOnClickListener { submit() }
         findViewById<Button>(R.id.mic).setOnClickListener { startListening() }
@@ -80,7 +92,28 @@ class MainActivity : AppCompatActivity() {
                 emit("TARS online. Talk, or tap MIC to speak. /help for commands.")
             }
             refreshStatus()
+            checkUpdates(silent = true)
         }, delay)
+    }
+
+    private fun checkUpdates(silent: Boolean) {
+        work.execute {
+            val u = updater.checkForUpdate(BuildConfig.VERSION_CODE)
+            if (u != null) ui.post { promptUpdate(u.first, u.second) }
+            else if (!silent) emit("update: you're on the latest build (b${BuildConfig.VERSION_CODE}).")
+        }
+    }
+
+    private fun promptUpdate(version: Int, apkUrl: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Обновление TARS")
+            .setMessage("Доступна сборка b$version (у тебя b${BuildConfig.VERSION_CODE}). Скачать и установить?")
+            .setPositiveButton("Обновить") { _, _ ->
+                emit("update: downloading b$version…")
+                work.execute { updater.downloadAndInstall(apkUrl) }
+            }
+            .setNegativeButton("Позже", null)
+            .show()
     }
 
     private fun submit() {
@@ -141,6 +174,7 @@ class MainActivity : AppCompatActivity() {
             "/nasal" -> parts.getOrNull(1)?.toFloatOrNull()?.let { voice.nasal = it; emit("nasal = $it") }
                         ?: emit("usage: /nasal <0-1>   (current ${voice.nasal})")
             "/say" -> { val t = line.substringAfter("/say").trim(); if (t.isNotEmpty()) voice.speak(t) else emit("usage: /say <text>") }
+            "/update" -> { emit("checking for updates…"); checkUpdates(silent = false) }
             "/clear" -> ui.post { stream.text = "" }
             else -> emit("unknown command '${parts[0]}'. /help")
         }
@@ -186,6 +220,7 @@ class MainActivity : AppCompatActivity() {
             "  /pitch <0.5-2.0>    voice pitch",
             "  /nasal <0-1>        nasal / VHS colour (Gavrilov-ish)",
             "  /say <text>         test the voice",
+            "  /update             check for a new build & install",
             "  /clear              clear the screen",
             "  /help               this list",
             "MIC button = speak to TARS. free key: aistudio.google.com/apikey",
