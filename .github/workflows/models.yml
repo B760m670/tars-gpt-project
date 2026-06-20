@@ -34,13 +34,27 @@ jobs:
           - repo: Qwen/Qwen3-1.7B-GGUF
             file: Qwen3-1.7B-Q4_K_M.gguf
     steps:
-      - name: Download ${{ matrix.model.file }} from HuggingFace
+      - name: Resolve real filename on HuggingFace and download
         run: |
-          set -e
-          url="https://huggingface.co/${{ matrix.model.repo }}/resolve/main/${{ matrix.model.file }}?download=true"
-          echo "fetching $url"
-          curl -fL --retry 5 --retry-delay 5 -o "${{ matrix.model.file }}" "$url"
-          ls -lh "${{ matrix.model.file }}"
+          set -euo pipefail
+          repo="${{ matrix.model.repo }}"
+          canonical="${{ matrix.model.file }}"
+          echo "querying HuggingFace API for $repo"
+          json="$(curl -fsSL "https://huggingface.co/api/models/$repo")"
+          # The GGUF filename/casing varies (e.g. lowercase, or a subfolder), so
+          # discover the actual Q4_K_M *.gguf instead of guessing (a wrong guess was
+          # the original 404). Prefer a single-file Q4_K_M; fall back to any gguf.
+          fname="$(printf '%s' "$json" | python3 -c "import sys,json,re
+s=json.load(sys.stdin).get('siblings',[])
+g=[x['rfilename'] for x in s if x['rfilename'].lower().endswith('.gguf')]
+q=[f for f in g if re.search('q4_k_m', f, re.I) and 'of' not in f.lower()]
+print((q or [f for f in g if re.search('q4_k_m', f, re.I)] or g or [''])[0])")"
+          echo "resolved: '$fname'"
+          test -n "$fname"
+          curl -fL --retry 5 --retry-delay 5 \
+            -o "$canonical" \
+            "https://huggingface.co/$repo/resolve/main/$fname?download=true"
+          ls -lh "$canonical"
 
       - name: Upload to the "models" release
         uses: softprops/action-gh-release@v2
