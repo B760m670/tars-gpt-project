@@ -1,13 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TARS</string>
-    <string name="send">Send</string>
-    <string name="brain">Brain</string>
-    <string name="voice">Voice</string>
-    <string name="muted">Muted</string>
-    <string name="mic">Mic</string>
-    <string name="eye">Eye</string>
-    <string name="copy">Copy log</string>
-    <string name="input_hint">Talk to TARS — or \$ command, py code…</string>
-    <string name="greeting">TARS online. Talk to me in English or Russian — or run \$ shell / py code right here.</string>
+    <string name="send">SEND</string>
+    <string name="mic">MIC</string>
+    <string name="input_hint">type a command…</string>
 </resources>

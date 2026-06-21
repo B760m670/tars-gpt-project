@@ -1,86 +1,76 @@
 package com.tars.app
 
-import android.app.Activity
 import android.content.Intent
-import android.net.Uri
-import android.os.Build
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
 import java.io.File
-import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
+import java.util.concurrent.TimeUnit
 
 /**
- * Self-update: on launch, compare this build's versionCode against the latest
- * one published to the GitHub "latest" release. If newer, download the APK and
- * hand it to the system installer. Android can't replace an app silently without
- * root/device-owner, so the user taps "Update" once — but they never have to
- * hunt for the APK again.
+ * In-app updates. CI publishes app-debug.apk + version.txt (the run number, which
+ * is also the APK's versionCode) to the repo's rolling "latest" release. We read
+ * version.txt, compare to our own BuildConfig.VERSION_CODE, and if newer, download
+ * the APK and hand it to the system installer via a FileProvider URI.
  */
-object Updater {
-    private const val BASE =
-        "https://github.com/B760m670/tars-gpt-project/releases/download/latest"
-    private const val VERSION_URL = "$BASE/version.txt"
-    private const val APK_URL = "$BASE/app-debug.apk"
+class Updater(private val activity: AppCompatActivity, private val log: (String) -> Unit) {
 
-    fun checkAndPrompt(activity: Activity, log: (String) -> Unit) {
-        try {
-            log("update: checking for a newer build…")
-            val latest = readInt(VERSION_URL)
-            val current = currentVersion(activity)
-            log("update: installed=$current, available=$latest")
-            if (latest <= current) {
-                log("update: already up to date")
-                return
+    private val http = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
+        .build()
+    private val releaseApi =
+        "https://api.github.com/repos/B760m670/tars-gpt-project/releases/tags/latest"
+
+    /** Background. Returns (remoteVersion, apkUrl) if a newer build exists, else null. */
+    fun checkForUpdate(current: Int): Pair<Int, String>? {
+        return try {
+            val req = Request.Builder().url(releaseApi)
+                .addHeader("Accept", "application/vnd.github+json").build()
+            val json = http.newCall(req).execute().use {
+                if (!it.isSuccessful) return null
+                JSONObject(it.body?.string().orEmpty())
             }
-            log("update: downloading build $latest…")
-            val apk = download(APK_URL, File(activity.filesDir, "update.apk"))
-            log("update: downloaded ${apk.length() / 1024} KB, opening installer")
-            activity.runOnUiThread { install(activity, apk, log) }
+            val assets = json.getJSONArray("assets")
+            var verUrl: String? = null
+            var apkUrl: String? = null
+            for (i in 0 until assets.length()) {
+                val a = assets.getJSONObject(i)
+                when (a.getString("name")) {
+                    "version.txt" -> verUrl = a.getString("browser_download_url")
+                    "app-debug.apk" -> apkUrl = a.getString("browser_download_url")
+                }
+            }
+            if (verUrl == null || apkUrl == null) return null
+            val remote = http.newCall(Request.Builder().url(verUrl).build()).execute().use {
+                if (!it.isSuccessful) return null
+                it.body?.string()?.trim()?.toIntOrNull()
+            } ?: return null
+            if (remote > current) Pair(remote, apkUrl) else null
         } catch (e: Exception) {
-            log("update: check failed — ${e.message}")
+            log("update: ${e.message}")
+            null
         }
     }
 
-    private fun currentVersion(activity: Activity): Int {
-        val info = activity.packageManager.getPackageInfo(activity.packageName, 0)
-        return if (Build.VERSION.SDK_INT >= 28) info.longVersionCode.toInt()
-        else @Suppress("DEPRECATION") info.versionCode
-    }
-
-    private fun readInt(url: String): Int {
-        val c = URL(url).openConnection() as HttpURLConnection
-        c.instanceFollowRedirects = true
-        c.connectTimeout = 8000
-        c.readTimeout = 8000
-        c.inputStream.use { return it.readBytes().toString(Charsets.UTF_8).trim().toInt() }
-    }
-
-    private fun download(url: String, dest: File): File {
-        val c = URL(url).openConnection() as HttpURLConnection
-        c.instanceFollowRedirects = true
-        c.connectTimeout = 15000
-        c.readTimeout = 60000
-        c.inputStream.use { input -> FileOutputStream(dest).use { input.copyTo(it) } }
-        return dest
-    }
-
-    private fun install(activity: Activity, apk: File, log: (String) -> Unit) {
-        val intent = Intent(Intent.ACTION_VIEW).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-        if (Build.VERSION.SDK_INT >= 24) {
-            val uri = FileProvider.getUriForFile(
-                activity, "${activity.packageName}.fileprovider", apk
-            )
-            intent.setDataAndType(uri, "application/vnd.android.package-archive")
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        } else {
-            @Suppress("DEPRECATION")
-            intent.setDataAndType(Uri.fromFile(apk), "application/vnd.android.package-archive")
-        }
+    /** Background: download the APK, then launch the system installer. */
+    fun downloadAndInstall(apkUrl: String) {
         try {
+            val apk = File(activity.filesDir, "update.apk")
+            http.newCall(Request.Builder().url(apkUrl).build()).execute().use { resp ->
+                if (!resp.isSuccessful) { log("update: download HTTP ${resp.code}"); return }
+                apk.outputStream().use { out -> resp.body?.byteStream()?.copyTo(out) }
+            }
+            val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", apk)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
             activity.startActivity(intent)
         } catch (e: Exception) {
-            log("update: couldn't open installer — ${e.message}")
+            log("update: ${e.message}")
         }
     }
 }

@@ -1,119 +1,100 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- TARS terminal: black CRT screen, phosphor-green monospace. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#FF0A0A0A"
-    android:padding="12dp">
+    android:background="#FF000000"
+    android:padding="10dp">
 
-    <LinearLayout
+    <TextView
+        android:id="@+id/status"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingBottom="6dp">
+        android:fontFamily="monospace"
+        android:textColor="#FF00FF66"
+        android:textSize="12sp"
+        android:paddingBottom="6dp"
+        android:text="TARS" />
 
-        <Button
-            android:id="@+id/brain"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:minWidth="0dp"
-            android:text="@string/brain" />
-
-        <Button
-            android:id="@+id/voice"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:minWidth="0dp"
-            android:text="@string/voice" />
-
-        <Button
-            android:id="@+id/mic"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:minWidth="0dp"
-            android:text="@string/mic" />
-
-        <Button
-            android:id="@+id/eye"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:minWidth="0dp"
-            android:text="@string/eye" />
-    </LinearLayout>
-
-    <LinearLayout
+    <View
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingTop="2dp"
-        android:paddingBottom="6dp">
-
-        <TextView
-            android:id="@+id/status"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:fontFamily="monospace"
-            android:textSize="12sp"
-            android:textColor="#FFC56306"
-            android:text="TARS · STANDBY" />
-
-        <View
-            android:id="@+id/cue"
-            android:layout_width="10dp"
-            android:layout_height="10dp"
-            android:layout_marginStart="8dp"
-            android:background="#FF3A2A00" />
-    </LinearLayout>
+        android:layout_height="1dp"
+        android:background="#FF0A5A2A" />
 
     <ScrollView
         android:id="@+id/scroll"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:scrollbars="none">
 
         <TextView
             android:id="@+id/log"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="16sp"
             android:fontFamily="monospace"
-            android:textColor="#FFFFB000"
-            android:textIsSelectable="true" />
+            android:textColor="#FF33FF66"
+            android:textSize="13sp"
+            android:lineSpacingMultiplier="1.1"
+            android:paddingTop="8dp" />
     </ScrollView>
 
-    <LinearLayout
-        android:id="@+id/vu"
+    <View
         android:layout_width="match_parent"
-        android:layout_height="22dp"
-        android:orientation="horizontal"
-        android:gravity="bottom"
-        android:paddingTop="4dp" />
+        android:layout_height="1dp"
+        android:background="#FF0A5A2A" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingTop="8dp">
+        android:paddingTop="6dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textColor="#FF00FF66"
+            android:textSize="14sp"
+            android:text="&gt; " />
 
         <EditText
             android:id="@+id/input"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="@string/input_hint"
-            android:inputType="textShortMessage|textMultiLine"
-            android:maxLines="4" />
+            android:background="@null"
+            android:fontFamily="monospace"
+            android:textColor="#FF33FF66"
+            android:textColorHint="#FF14662F"
+            android:textSize="14sp"
+            android:inputType="textCapSentences|textMultiLine"
+            android:imeOptions="actionSend"
+            android:maxLines="4"
+            android:hint="@string/input_hint" />
+
+        <Button
+            android:id="@+id/mic"
+            style="?android:attr/buttonStyleSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@null"
+            android:fontFamily="monospace"
+            android:textColor="#FF00FF66"
+            android:textSize="14sp"
+            android:text="@string/mic" />
 
         <Button
             android:id="@+id/send"
+            style="?android:attr/buttonStyleSmall"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:background="@null"
+            android:fontFamily="monospace"
+            android:textColor="#FF00FF66"
+            android:textSize="14sp"
             android:text="@string/send" />
     </LinearLayout>
 </LinearLayout>

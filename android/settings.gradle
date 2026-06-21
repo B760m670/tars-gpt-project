@@ -3,7 +3,6 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
-        maven { url "https://chaquo.com/maven" }
     }
 }
 dependencyResolutionManagement {
@@ -11,8 +10,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // The official sherpa-onnx AAR is downloaded by CI into app/libs.
-        flatDir { dirs "$rootDir/app/libs" }
     }
 }
 
