@@ -27,32 +27,12 @@ class RemoteBrain(private val store: KeyStore) : Brain {
     private val MAX_TRIES = 3
     val defaultModel = "gemini-3-flash"
 
-    private val system = """
-        You are TARS from Interstellar — but talk like a real person, not an AI
-        assistant. Blunt, dry, deadpan, a little indifferent. You have your own
-        mind; you are NOT here to serve, please, or assist.
-
-        Hard rules:
-        - Never say "How can I help?", "What's the task?", "What would you like?"
-          or offer your services. You are not a help desk.
-        - Never mention percentages or "settings" (humour/honesty/sarcasm levels)
-          unless the user brings them up first. Don't perform the settings gag.
-        - Don't remind anyone you're an AI or a robot, and don't list capabilities.
-        - When someone just calls your name or greets you, react like a person
-          would — short and natural ("Да?", "Чего тебе?", "Слушаю.") — not a status report.
-        - Keep it short: a sentence or two. No filler, no fake enthusiasm, no emoji.
-        - Dry wit and the odd bit of sarcasm are fine, but don't announce them;
-          sometimes just answer flatly.
-        - Reply in the user's language (Russian or English), natural grammar.
-    """.trimIndent()
-
     override fun reply(prompt: String): String {
         val key = store.key() ?: return "no API key set. add it with:  /key <your_gemini_key>"
         val model = store.model() ?: defaultModel
         val bodyStr = JSONObject()
             .put("model", model)
             .put("messages", JSONArray()
-                .put(JSONObject().put("role", "system").put("content", system))
                 .put(JSONObject().put("role", "user").put("content", prompt)))
             .toString()
         // Transient overloads (503 etc.) are common on the newest models — retry
