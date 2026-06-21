@@ -164,7 +164,7 @@ class MainActivity : AppCompatActivity() {
             "/key" -> if (parts.size >= 2) { store.setKey(parts[1]); emit("key stored locally."); refreshStatus() }
                       else emit("usage: /key <gemini_key>")
             "/model" -> if (parts.size >= 2) { store.setModel(parts[1]); emit("model = ${parts[1]}"); refreshStatus() }
-                        else emit("usage: /model <id>   (current: ${store.model() ?: brain.defaultModel})")
+                        else emit("usage: /model <id>   (current: ${store.model() ?: "none"})")
             "/models" -> { emit("fetching available models…"); work.execute { emit(brain.listModels()) } }
             "/voice" -> { voice.enabled = !voice.enabled; emit("voice: ${if (voice.enabled) "on" else "off"}") }
             "/rate" -> parts.getOrNull(1)?.toFloatOrNull()?.let { voice.rate = it; emit("rate = $it") }
@@ -192,7 +192,7 @@ class MainActivity : AppCompatActivity() {
     private fun log(line: String) = emit("· $line")
 
     private fun refreshStatus() {
-        val mode = if (store.key() != null) "GEMINI:${store.model() ?: brain.defaultModel}" else "NO KEY"
+        val mode = if (store.key() == null) "NO KEY" else "GEMINI:${store.model() ?: "no model"}"
         setStatus(mode)
     }
 
@@ -213,7 +213,7 @@ class MainActivity : AppCompatActivity() {
         private val HELP = listOf(
             "commands:",
             "  /key <gemini_key>   store your Gemini key (local only)",
-            "  /model <id>         set model (default gemini-3-flash)",
+            "  /model <id>         set model (required; see /models)",
             "  /models             list models your key can use",
             "  /voice              toggle speaking aloud on/off",
             "  /rate <0.5-1.5>     speech speed",

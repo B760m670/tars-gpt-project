@@ -25,11 +25,10 @@ class RemoteBrain(private val store: KeyStore) : Brain {
 
     private val base = "https://generativelanguage.googleapis.com/v1beta/openai"
     private val MAX_TRIES = 3
-    val defaultModel = "gemini-3-flash"
 
     override fun reply(prompt: String): String {
         val key = store.key() ?: return "no API key set. add it with:  /key <your_gemini_key>"
-        val model = store.model() ?: defaultModel
+        val model = store.model() ?: return "no model set. run /models, then /model <id>"
         val bodyStr = JSONObject()
             .put("model", model)
             .put("messages", JSONArray()
